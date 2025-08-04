@@ -116,7 +116,6 @@ class _LoginScreenState extends State<LoginScreen> {
             size: 20.sp,
           ),
           onPressed: () {
-            Navigator.pop(context);
           },
         ),
       ),

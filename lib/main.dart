@@ -5,42 +5,48 @@ import 'package:provider/provider.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
+import 'package:permission_handler/permission_handler.dart';
 
 import 'screens/splash_screen.dart';
 import 'screens/auth/login_screen.dart';
-import 'screens/auth/otp_screen.dart';
-import 'screens/auth/signup_screen.dart';
 import 'navbar/navbar.dart';
 import 'providers/auth_provider.dart';
 import 'providers/theme_provider.dart';
 import 'providers/progress_provider.dart';
-import 'providers/lead_provider.dart'; // Add LeadProvider import
+import 'providers/lead_provider.dart';
 import 'theme/default_theme.dart';
 import 'firebase_options.dart';
+import 'secure_storage.dart';
+import 'services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  
-  // Initialize Firebase App Check
+
+  // ✅ Firebase App Check
   await FirebaseAppCheck.instance.activate(
-    // For debug/development:
-    androidProvider: AndroidProvider.debug,
-    // For production (uncomment when ready for production):
-    // androidProvider: AndroidProvider.playIntegrity,
-    // iosProvider: IOSProvider.appAttest,
-    webProvider: ReCaptchaV3Provider('recaptcha-v3-site-key'), // Replace with your actual site key
+    androidProvider: AndroidProvider.playIntegrity,
+    webProvider: ReCaptchaV3Provider('recaptcha-v3-site-key'), // Replace with real site key if used
   );
-  
+
+  // ✅ Initialize Local Notifications
+  await NotificationService.initialize();
+
+  // ✅ Request notification permission (Android 13+)
+  if (await Permission.notification.isDenied) {
+    await Permission.notification.request();
+  }
+
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider(create: (_) => ProgressProvider()),
-        ChangeNotifierProvider(create: (_) => LeadProvider()), // Add LeadProvider
+        ChangeNotifierProvider(create: (_) => LeadProvider()),
       ],
       child: const MyApp(),
     ),
@@ -48,12 +54,12 @@ void main() async {
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({Key? key}) : super(key: key);
+  const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return ScreenUtilInit(
-      designSize: const Size(375, 812), // Base design size
+      designSize: const Size(375, 812),
       minTextAdapt: true,
       splitScreenMode: true,
       builder: (_, child) {
@@ -61,7 +67,10 @@ class MyApp extends StatelessWidget {
           debugShowCheckedModeBanner: false,
           title: 'Skill Bench',
           theme: AppTheme.defaultTheme,
+          // ✅ Change this to `NotificationTestScreen` for testing notifications:
           home: const AuthCheckScreen(),
+          // ✅ Later, change back to real app flow:
+          // home: const AuthCheckScreen(),
         );
       },
     );
@@ -69,10 +78,10 @@ class MyApp extends StatelessWidget {
 }
 
 class AuthCheckScreen extends StatefulWidget {
-  const AuthCheckScreen({Key? key}) : super(key: key);
+  const AuthCheckScreen({super.key});
 
   @override
-  _AuthCheckScreenState createState() => _AuthCheckScreenState();
+  State<AuthCheckScreen> createState() => _AuthCheckScreenState();
 }
 
 class _AuthCheckScreenState extends State<AuthCheckScreen> {
@@ -88,19 +97,18 @@ class _AuthCheckScreenState extends State<AuthCheckScreen> {
 
   Future<void> _checkFirstTime() async {
     try {
-      print('CRITICAL: Starting auth check');
-      
+      // ✅ Migrate SharedPreferences to secure storage
+      await SecureStorage.migrateFromSharedPreferences([
+        'phone_number',
+        'is_logged_in',
+      ]);
+
       final prefs = await SharedPreferences.getInstance();
       final isFirstTime = prefs.getBool('first_time') ?? true;
-      
-      print("CRITICAL: Auth check - First time: $isFirstTime");
-      
-      // For the new OTP system, check login status using AuthProvider
+
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      final bool userLoggedIn = await authProvider.isUserLoggedIn();
-      
-      print("CRITICAL: User logged in status: $userLoggedIn");
-      
+      final userLoggedIn = await authProvider.isUserLoggedIn();
+
       if (mounted) {
         setState(() {
           _isFirstTime = isFirstTime;
@@ -110,53 +118,45 @@ class _AuthCheckScreenState extends State<AuthCheckScreen> {
       }
 
       if (isFirstTime) {
-        print('CRITICAL: First time user, showing splash');
-        // Mark as not first time for future app opens
         await prefs.setBool('first_time', false);
-        
-        // Show splash screen for 3 seconds then navigate to login
         Future.delayed(const Duration(seconds: 3), () {
           if (mounted) {
             Navigator.pushReplacement(
-              context, 
-              MaterialPageRoute(builder: (context) => const LoginScreen())
+              context,
+              MaterialPageRoute(builder: (_) => const LoginScreen()),
             );
           }
         });
       } else {
         if (userLoggedIn) {
+          await authProvider.checkStreakStatusAndNotify();
+          Provider.of<ProgressProvider>(context, listen: false).loadAllProgress();
+
           if (mounted) {
-            // Initialize progress provider when user is logged in
-            Provider.of<ProgressProvider>(context, listen: false).loadProgressData();
-            
-            print("CRITICAL: User is logged in, navigating to NavBar");
             Navigator.pushReplacement(
-              context, 
-              MaterialPageRoute(builder: (context) => const NavBar())
+              context,
+              MaterialPageRoute(builder: (_) => const NavBar()),
             );
           }
         } else {
           if (mounted) {
-            print("CRITICAL: User is not logged in, navigating to LoginScreen");
             Navigator.pushReplacement(
-              context, 
-              MaterialPageRoute(builder: (context) => const LoginScreen())
+              context,
+              MaterialPageRoute(builder: (_) => const LoginScreen()),
             );
           }
         }
       }
     } catch (e) {
-      print('CRITICAL ERROR: Error in auth check: $e');
-      
-      // In case of error, default to login screen
+      print('ERROR: $e');
       if (mounted) {
         setState(() {
           _isLoading = false;
         });
-        
+
         Navigator.pushReplacement(
-          context, 
-          MaterialPageRoute(builder: (context) => const LoginScreen())
+          context,
+          MaterialPageRoute(builder: (_) => const LoginScreen()),
         );
       }
     }
@@ -166,12 +166,10 @@ class _AuthCheckScreenState extends State<AuthCheckScreen> {
   Widget build(BuildContext context) {
     if (_isLoading) {
       return const Scaffold(
-        body: Center(
-          child: CircularProgressIndicator(),
-        ),
+        body: Center(child: CircularProgressIndicator()),
       );
     }
-    
+
     return _isFirstTime ? const CustomSplashScreen() : const LoginScreen();
   }
 }

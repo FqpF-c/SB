@@ -3,38 +3,37 @@ import 'package:sms_autofill/sms_autofill.dart';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
-import 'package:cloud_firestore/cloud_firestore.dart';
 
 class OTPService {
   final firebase_auth.FirebaseAuth _auth = firebase_auth.FirebaseAuth.instance;
 
-  // Firebase Firestore API key container
   String? _apiKey;
 
-  // Constants for test mode
   static const String testPhoneNumber = '1234567890'; // Without +91
   static const String testOTP = '123456';
   static const String testSessionId = 'test-session-id';
 
-  // Session ID storage key
   static const String sessionIdKey = 'otp_session_id';
 
-  // Load 2Factor API key from Firestore
+  // Load 2Factor API key from backend
   Future<void> _loadApiKey() async {
     try {
-      final doc = await FirebaseFirestore.instance
-          .collection('2Factor')
-          .doc('apiKey')
-          .get();
-      _apiKey = doc['key'];
-      print('CRITICAL: Fetched API key from Firestore');
+      final response = await http.get(Uri.parse('https://prepbackend.onesite.store/otpget'));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        _apiKey = data['key'];
+        print('CRITICAL: Fetched API key from backend: $_apiKey');
+      } else {
+        print('CRITICAL ERROR: Failed to load API key. Status: ${response.statusCode}');
+        throw Exception('Could not load API key from server');
+      }
     } catch (e) {
-      print('CRITICAL ERROR: Failed to fetch API key: $e');
+      print('CRITICAL ERROR: Exception while loading API key from server: $e');
       throw Exception('Could not load API key');
     }
   }
 
-  // Store session ID locally
   Future<void> _saveSessionId(String sessionId) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -45,7 +44,6 @@ class OTPService {
     }
   }
 
-  // Retrieve session ID
   Future<String?> _getSessionId() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -58,7 +56,6 @@ class OTPService {
     }
   }
 
-  // Clear session ID
   Future<void> _clearSessionId() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -69,7 +66,6 @@ class OTPService {
     }
   }
 
-  // Send OTP using 2Factor API
   static Future<Map<String, dynamic>> sendOTP(String phoneNumber) async {
     try {
       final otpService = OTPService();
@@ -120,7 +116,6 @@ class OTPService {
     }
   }
 
-  // Verify OTP using 2Factor API
   static Future<bool> verifyOTP(String sessionId, String otp) async {
     try {
       final otpService = OTPService();
@@ -164,7 +159,6 @@ class OTPService {
     }
   }
 
-  // Send OTP and handle result in UI
   Future<void> sendOTPWithCallback({
     required String phoneNumber,
     required Function onSuccess,
@@ -196,7 +190,6 @@ class OTPService {
     }
   }
 
-  // Verify OTP and authenticate
   Future<void> verifyOTPWithCallback({
     required String otp,
     required Function onSuccess,
@@ -235,13 +228,11 @@ class OTPService {
     }
   }
 
-  // Test phone checker
   bool isTestPhoneNumber(String phoneNumber) {
     String cleanPhoneNumber = phoneNumber.replaceFirst('+91', '');
     return cleanPhoneNumber == testPhoneNumber;
   }
 
-  // Sign out
   Future<void> signOut() async {
     try {
       await _auth.signOut();
@@ -253,12 +244,10 @@ class OTPService {
     }
   }
 
-  // Get UID
   String? getCurrentUserUid() {
     final user = _auth.currentUser;
     return user?.uid;
   }
 
-  // Auth state stream
   Stream<firebase_auth.User?> get authStateChanges => _auth.authStateChanges();
 }

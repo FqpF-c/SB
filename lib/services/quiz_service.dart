@@ -1,14 +1,13 @@
+// Import Statements
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../providers/auth_provider.dart';
 
 class QuizService {
-  // AWS endpoints for your Python scripts
   static const String _programmingEndpoint = 'https://prepbackend.onesite.store/prep/generate-questions';
-  static const String _academicEndpoint = 'http://3.109.201.91:5000/quiz';
-  
+  static const String _academicEndpoint = 'https://prepbackend.onesite.store/quiz';
+
   // Firebase instance
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   
@@ -39,6 +38,40 @@ Format each question as JSON with:
 Focus on: {mainTopic} - {subTopic} in {programmingLanguage}
 ''',
 
+    'programming_practice_adaptive': '''
+Generate {count} adaptive multiple-choice questions about {programmingLanguage} focusing on {subTopic}.
+
+Performance Analysis:
+{performanceAnalysis}
+
+Adaptive Requirements:
+- Focus more on weak topics: {weakTopics}
+- Reduce emphasis on strong topics: {strongTopics}
+- Adjust difficulty based on overall accuracy: {overallAccuracy}%
+- Consider time patterns: average {averageTime}s per question
+- Include broader conceptual questions for weak areas
+- Add advanced questions for strong areas
+
+Generate questions that:
+1. Address identified weaknesses with foundational concepts
+2. Reinforce learning in problem areas
+3. Challenge strengths with harder variations
+4. Include cross-topic questions that combine weak and strong areas
+5. Focus on practical application over memorization
+
+Format each question as JSON with:
+- "question": the question text (adaptive based on performance)
+- "options": array of 4 choices
+- "correct_answer": the correct option
+- "explanation": detailed explanation focusing on weak areas
+- "difficulty": dynamically adjusted based on topic performance
+- "hint": strategic hint for identified weak areas
+- "topic": specific topic this question addresses
+- "adaptive_reason": why this question was generated (weakness/strength reinforcement)
+
+Focus on: {mainTopic} - {subTopic} in {programmingLanguage}
+''',
+
     'programming_test': '''
 Generate {count} challenging multiple-choice questions about {programmingLanguage} for assessment.
 
@@ -63,6 +96,46 @@ Topic: {mainTopic} - {subTopic} in {programmingLanguage}
 Target: Assessment/Testing
 ''',
 
+    'programming_test_adaptive': '''
+Generate {count} adaptive test questions about {programmingLanguage} for the remaining portion of the assessment.
+
+Performance Analysis from First 7 Questions:
+{performanceAnalysis}
+
+Adaptive Test Requirements:
+- Address weak areas: {weakTopics} with focused questions
+- Challenge strong areas: {strongTopics} with advanced concepts
+- Overall accuracy so far: {overallAccuracy}%
+- Recommended difficulty adjustment: {recommendedDifficulty}
+- Time efficiency: {averageTime}s average
+
+Generate the remaining test questions that:
+1. Target identified weaknesses with remedial but challenging questions
+2. Test mastery in strong areas with complex scenarios
+3. Include integration questions combining multiple topics
+4. Maintain assessment integrity while being adaptive
+5. Scale difficulty appropriately for remaining test portion
+
+Difficulty Distribution for Adaptive Questions:
+- If accuracy < 60%: 50% easy, 40% medium, 10% hard
+- If accuracy 60-80%: 30% easy, 50% medium, 20% hard  
+- If accuracy > 80%: 20% easy, 40% medium, 40% hard
+
+Format each question as JSON with:
+- "question": the question text (adaptive difficulty)
+- "options": array of 4 choices
+- "correct_answer": the correct option
+- "explanation": detailed explanation
+- "difficulty": adjusted based on performance
+- "hint": helpful hint
+- "topic": specific topic addressed
+- "adaptive_reason": why this question was selected
+- "is_adaptive": true
+
+Topic: {mainTopic} - {subTopic} in {programmingLanguage}
+Target: Adaptive Assessment
+''',
+
     'academic_practice': '''
 Generate {count} multiple-choice questions for {subject} - {unit}.
 
@@ -82,6 +155,40 @@ Format each question as JSON with:
 - "explanation": educational explanation with additional context
 - "difficulty": "easy", "medium", or "hard"
 - "hint": learning hint to guide understanding
+
+Subject: {subject}, Unit: {unit}
+Academic Level: {semester} semester
+Institution: {college}
+''',
+
+    'academic_practice_adaptive': '''
+Generate {count} adaptive multiple-choice questions for {subject} - {unit}.
+
+Performance Analysis:
+{performanceAnalysis}
+
+Adaptive Requirements for Academic Content:
+- Weak topic areas: {weakTopics}
+- Strong topic areas: {strongTopics}
+- Overall comprehension: {overallAccuracy}%
+- Learning pace: {averageTime}s per question
+
+Generate questions that:
+1. Reinforce weak conceptual areas with foundational questions
+2. Build upon strong areas with application questions
+3. Include interdisciplinary connections for better understanding
+4. Focus on practical applications of theoretical concepts
+5. Provide scaffolding for difficult topics
+
+Format each question as JSON with:
+- "question": the question text (adaptive to learning needs)
+- "options": array of 4 choices
+- "correct_answer": the correct option
+- "explanation": educational explanation focusing on weak areas
+- "difficulty": adjusted for optimal learning
+- "hint": learning hint for identified weak areas
+- "topic": specific concept addressed
+- "adaptive_reason": learning objective for this question
 
 Subject: {subject}, Unit: {unit}
 Academic Level: {semester} semester
@@ -114,26 +221,18 @@ Purpose: Formal Assessment
 ''',
   };
 
-  // Fetch prompt template from Firebase
   static Future<String> _fetchPromptTemplateFromFirebase({
     required String categoryId,
     required String subcategory,
     required String topic,
   }) async {
+    final cacheKey = '${categoryId}_${subcategory}_${topic}';
+
+    if (_templateCache.containsKey(cacheKey)) {
+      return _templateCache[cacheKey]!;
+    }
+
     try {
-      // Create cache key
-      final cacheKey = '${categoryId}_${subcategory}_${topic}';
-      
-      // Check cache first
-      if (_templateCache.containsKey(cacheKey)) {
-        print('QUIZ_SERVICE: Using cached template for $cacheKey');
-        return _templateCache[cacheKey]!;
-      }
-      
-      print('QUIZ_SERVICE: Fetching template from Firebase...');
-      print('Path: /prep/Title/$categoryId/$categoryId/$subcategory/Topics/$topic/prompttemplate');
-      
-      // Firebase path: prep/Title/{categoryId}/{categoryId}/{subcategory}/Topics/{topic}/prompttemplate/prompttemplate
       final docRef = _firestore
           .collection('prep')
           .doc('Title')
@@ -143,36 +242,24 @@ Purpose: Formal Assessment
           .doc('Topics')
           .collection(topic)
           .doc('prompttemplate');
-      
+
       final docSnapshot = await docRef.get();
-      
+
       if (docSnapshot.exists && docSnapshot.data() != null) {
         final data = docSnapshot.data()!;
-        
         if (data.containsKey('prompttemplate') && data['prompttemplate'] != null) {
           final template = data['prompttemplate'].toString();
-          
-          // Cache the template
           _templateCache[cacheKey] = template;
-          
-          print('QUIZ_SERVICE: Successfully fetched template from Firebase (${template.length} characters)');
           return template;
-        } else {
-          print('QUIZ_SERVICE: prompttemplate field not found in document');
         }
-      } else {
-        print('QUIZ_SERVICE: prompttemplate document does not exist');
       }
-      
-      // Return null if not found (will use fallback)
-      return '';
     } catch (e) {
-      print('QUIZ_SERVICE: Error fetching template from Firebase: $e');
-      return '';
+      print('Error fetching template from Firebase: $e');
     }
+
+    return '';
   }
 
-  // Get appropriate prompt template (Firebase first, then fallback)
   static Future<String> _getPromptTemplate({
     required String type,
     required String mode,
@@ -180,137 +267,134 @@ Purpose: Formal Assessment
     String? subcategory,
     String? topic,
     String? customPrompt,
+    bool isAdaptive = false,
   }) async {
-    // If custom prompt is provided, use it
-    if (customPrompt != null && customPrompt.isNotEmpty) {
-      return customPrompt;
-    }
-    
-    // Try to fetch from Firebase if we have the path parameters
+    if (customPrompt != null && customPrompt.isNotEmpty) return customPrompt;
+
     if (categoryId != null && subcategory != null && topic != null) {
-      print('QUIZ_SERVICE: Attempting to fetch template from Firebase...');
       final firebaseTemplate = await _fetchPromptTemplateFromFirebase(
         categoryId: categoryId,
         subcategory: subcategory,
         topic: topic,
       );
-      
-      if (firebaseTemplate.isNotEmpty) {
-        print('QUIZ_SERVICE: Using Firebase template');
-        return firebaseTemplate;
-      }
+      if (firebaseTemplate.isNotEmpty) return firebaseTemplate;
     }
+
+    final templateKey = isAdaptive 
+        ? '${type}_${mode}_adaptive'
+        : '${type}_$mode';
     
-    // Fallback to predefined templates
-    print('QUIZ_SERVICE: Using fallback template for ${type}_$mode');
-    final templateKey = '${type}_$mode';
     return _fallbackTemplates[templateKey] ?? _fallbackTemplates['programming_practice']!;
   }
 
-  // Fill template with actual values
   static String _fillPromptTemplate({
     required String template,
     required Map<String, dynamic> params,
     required int count,
+    Map<String, dynamic>? performanceData,
   }) {
-    String filledTemplate = template.replaceAll('{count}', count.toString());
+    String filled = template.replaceAll('{count}', count.toString());
     
-    // Replace all parameter placeholders
-    params.forEach((key, value) {
-      filledTemplate = filledTemplate.replaceAll('{$key}', value?.toString() ?? '');
-    });
+    // Fill basic parameters
+    params.forEach((k, v) => filled = filled.replaceAll('{$k}', v?.toString() ?? ''));
     
-    return filledTemplate;
+    // Fill performance analysis if provided
+    if (performanceData != null && performanceData.isNotEmpty) {
+      filled = filled.replaceAll('{performanceAnalysis}', json.encode(performanceData));
+      filled = filled.replaceAll('{weakTopics}', (performanceData['weakTopics'] as List?)?.join(', ') ?? 'None identified');
+      filled = filled.replaceAll('{strongTopics}', (performanceData['strongTopics'] as List?)?.join(', ') ?? 'None identified');
+      filled = filled.replaceAll('{overallAccuracy}', (performanceData['overallAccuracy'] ?? 0).toString());
+      filled = filled.replaceAll('{averageTime}', (performanceData['averageTime'] ?? 30).toString());
+      filled = filled.replaceAll('{recommendedDifficulty}', performanceData['recommendedDifficulty'] ?? 'Medium');
+    }
+    
+    return filled;
   }
 
-  // Generate questions for Programming path
   static Future<List<Map<String, dynamic>>> generateProgrammingQuestions({
     required String mainTopic,
     required String programmingLanguage,
     required String subTopic,
     int count = 10,
+    int setCount = 0,
     String? customPrompt,
     String? modelType,
     String mode = 'practice',
-    // Firebase path parameters for template fetching
     String? categoryId,
     String? subcategory,
     String? topic,
+    Map<String, dynamic>? performanceData,
   }) async {
-    try {
-      print('QUIZ_SERVICE: Generating programming questions...');
-      print('Main Topic: $mainTopic, Language: $programmingLanguage, Sub Topic: $subTopic, Count: $count, Mode: $mode');
-      
-      // Get and fill the appropriate prompt template
-      final templateParams = {
-        'mainTopic': mainTopic,
-        'programmingLanguage': programmingLanguage,
-        'subTopic': subTopic,
-      };
-      
-      final baseTemplate = await _getPromptTemplate(
-        type: 'programming',
-        mode: mode,
-        categoryId: categoryId,
-        subcategory: subcategory,
-        topic: topic,
-        customPrompt: customPrompt,
-      );
-      
-      final promptTemplate = _fillPromptTemplate(
-        template: baseTemplate,
-        params: templateParams,
-        count: count,
-      );
-      
-      final requestBody = {
-        'mainTopic': mainTopic,
-        'programmingLanguage': programmingLanguage,
-        'subTopic': subTopic,
-        'count': count,
-        'promptTemplate': promptTemplate,
-        if (customPrompt != null) 'customPrompt': customPrompt,
-        if (modelType != null) 'modelType': modelType,
-        'mode': mode,
-        // Include Firebase path info for backend reference
-        if (categoryId != null) 'categoryId': categoryId,
-        if (subcategory != null) 'subcategory': subcategory,
-        if (topic != null) 'topic': topic,
-      };
-      
-      print('QUIZ_SERVICE: Request body keys: ${requestBody.keys.toList()}');
-      print('QUIZ_SERVICE: Prompt template length: ${promptTemplate.length} characters');
-      
-      final response = await http.post(
-        Uri.parse(_programmingEndpoint),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: json.encode(requestBody),
-      ).timeout(Duration(seconds: 60));
-      
-      print('QUIZ_SERVICE: Response status: ${response.statusCode}');
-      
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
+    final templateParams = {
+      'mainTopic': mainTopic,
+      'programmingLanguage': programmingLanguage,
+      'subTopic': subTopic,
+    };
+
+    final isAdaptive = performanceData != null && performanceData.isNotEmpty;
+    
+    final baseTemplate = await _getPromptTemplate(
+      type: 'programming',
+      mode: mode,
+      categoryId: categoryId,
+      subcategory: subcategory,
+      topic: topic,
+      customPrompt: customPrompt,
+      isAdaptive: isAdaptive,
+    );
+
+    final promptTemplate = _fillPromptTemplate(
+      template: baseTemplate,
+      params: templateParams,
+      count: count,
+      performanceData: performanceData,
+    );
+
+    final body = {
+      'mainTopic': mainTopic,
+      'programmingLanguage': programmingLanguage,
+      'subTopic': subTopic,
+      'count': count,
+      'setCount': setCount,
+      'promptTemplate': promptTemplate,
+      'mode': mode,
+      'isAdaptive': isAdaptive,
+      'performanceData': performanceData,
+      if (customPrompt != null) 'customPrompt': customPrompt,
+      if (modelType != null) 'modelType': modelType,
+      if (categoryId != null) 'categoryId': categoryId,
+      if (subcategory != null) 'subcategory': subcategory,
+      if (topic != null) 'topic': topic,
+    };
+
+    final response = await http.post(
+      Uri.parse(_programmingEndpoint),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode(body),
+    ).timeout(Duration(seconds: 90)); // Longer timeout for adaptive generation
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      if (data is List) {
+        List<Map<String, dynamic>> questions = List<Map<String, dynamic>>.from(data);
         
-        if (data is List) {
-          return List<Map<String, dynamic>>.from(data);
-        } else {
-          throw Exception('Invalid response format: expected array of questions');
+        // Mark adaptive questions
+        if (isAdaptive) {
+          for (var question in questions) {
+            question['is_adaptive'] = true;
+            question['generated_from_performance'] = true;
+          }
         }
-      } else {
-        final errorData = json.decode(response.body);
-        throw Exception('Server error: ${errorData['error'] ?? 'Unknown error'}');
+        
+        return questions;
       }
-    } catch (e) {
-      print('QUIZ_SERVICE ERROR: $e');
-      throw Exception('Failed to generate questions: $e');
+      throw Exception('Invalid response format');
+    } else {
+      final error = json.decode(response.body);
+      throw Exception('Server error: ${error['error'] ?? 'Unknown'}');
     }
   }
-  
-  // Generate questions for Academic path
+
   static Future<List<Map<String, dynamic>>> generateAcademicQuestions({
     required String college,
     required String department,
@@ -318,294 +402,275 @@ Purpose: Formal Assessment
     required String subject,
     required String unit,
     int count = 10,
+    int setCount = 0,
     String? customPrompt,
     String mode = 'practice',
+    Map<String, dynamic>? performanceData,
   }) async {
-    try {
-      print('QUIZ_SERVICE: Generating academic questions...');
-      print('College: $college, Department: $department, Semester: $semester, Subject: $subject, Unit: $unit, Count: $count, Mode: $mode');
-      
-      // For academic, we don't have the same Firebase structure, so use fallback templates
-      final templateParams = {
-        'college': college,
-        'department': department,
-        'semester': semester,
-        'subject': subject,
-        'unit': unit,
-      };
-      
-      final baseTemplate = await _getPromptTemplate(
-        type: 'academic',
-        mode: mode,
-        customPrompt: customPrompt,
-      );
-      
-      final promptTemplate = _fillPromptTemplate(
-        template: baseTemplate,
-        params: templateParams,
-        count: count,
-      );
-      
-      final requestBody = {
-        'college': college,
-        'department': department,
-        'semester': semester,
-        'subject': subject,
-        'unit': unit,
-        'count': count,
-        'promptTemplate': promptTemplate,
-        'mode': mode,
-      };
-      
-      print('QUIZ_SERVICE: Request body keys: ${requestBody.keys.toList()}');
-      print('QUIZ_SERVICE: Prompt template length: ${promptTemplate.length} characters');
-      
-      final response = await http.post(
-        Uri.parse(_academicEndpoint),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: json.encode(requestBody),
-      ).timeout(Duration(seconds: 60));
-      
-      print('QUIZ_SERVICE: Response status: ${response.statusCode}');
-      
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
+    final templateParams = {
+      'college': college,
+      'department': department,
+      'semester': semester,
+      'subject': subject,
+      'unit': unit,
+    };
+
+    final isAdaptive = performanceData != null && performanceData.isNotEmpty;
+
+    final baseTemplate = await _getPromptTemplate(
+      type: 'academic',
+      mode: mode,
+      customPrompt: customPrompt,
+      isAdaptive: isAdaptive,
+    );
+
+    final promptTemplate = _fillPromptTemplate(
+      template: baseTemplate,
+      params: templateParams,
+      count: count,
+      performanceData: performanceData,
+    );
+
+    final body = {
+      'college': college,
+      'department': department,
+      'semester': semester,
+      'subject': subject,
+      'unit': unit,
+      'count': count,
+      'setCount': setCount,
+      'promptTemplate': promptTemplate,
+      'mode': mode,
+      'isAdaptive': isAdaptive,
+      'performanceData': performanceData,
+    };
+
+    final response = await http.post(
+      Uri.parse(_academicEndpoint),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode(body),
+    ).timeout(Duration(seconds: 90));
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      if (data['files'] != null && data['files'].isNotEmpty) {
+        final content = data['files'][0]['content'];
+        final parsed = json.decode(content);
+        List<Map<String, dynamic>> questions = List<Map<String, dynamic>>.from(parsed['questions']);
         
-        if (data['files'] != null && data['files'].isNotEmpty) {
-          final fileContent = data['files'][0]['content'];
-          final questionsData = json.decode(fileContent);
-          
-          if (questionsData['questions'] != null) {
-            return List<Map<String, dynamic>>.from(questionsData['questions']);
-          } else {
-            throw Exception('No questions found in response');
+        // Mark adaptive questions
+        if (isAdaptive) {
+          for (var question in questions) {
+            question['is_adaptive'] = true;
+            question['generated_from_performance'] = true;
           }
-        } else {
-          throw Exception('Invalid response format: no files found');
         }
-      } else {
-        final errorData = json.decode(response.body);
-        throw Exception('Server error: ${errorData['error'] ?? 'Unknown error'}');
+        
+        return questions;
       }
-    } catch (e) {
-      print('QUIZ_SERVICE ERROR: $e');
-      throw Exception('Failed to generate questions: $e');
+      throw Exception('Invalid response format');
+    } else {
+      final error = json.decode(response.body);
+      throw Exception('Server error: ${error['error'] ?? 'Unknown'}');
     }
   }
-  
-  // Generate questions for Practice Mode (10 questions per request)
+
   static Future<List<Map<String, dynamic>>> generatePracticeQuestions({
     required String type,
     required Map<String, dynamic> params,
   }) async {
-    try {
-      List<Map<String, dynamic>> questions;
-      
-      if (type == 'programming') {
-        questions = await generateProgrammingQuestions(
-          mainTopic: params['mainTopic'],
-          programmingLanguage: params['programmingLanguage'],
-          subTopic: params['subTopic'],
-          count: 10,
-          mode: 'practice',
-          categoryId: params['categoryId'],
-          subcategory: params['subcategory'],
-          topic: params['topic'],
-        );
-      } else {
-        questions = await generateAcademicQuestions(
-          college: params['college'],
-          department: params['department'],
-          semester: params['semester'],
-          subject: params['subject'],
-          unit: params['unit'],
-          count: 10,
-          mode: 'practice',
-        );
-      }
-      
-      return questions;
-    } catch (e) {
-      print('QUIZ_SERVICE: Error generating practice questions: $e');
-      rethrow;
-    }
+    return (type == 'programming')
+        ? await generateProgrammingQuestions(
+            mainTopic: params['mainTopic'],
+            programmingLanguage: params['programmingLanguage'],
+            subTopic: params['subTopic'],
+            count: 10,
+            setCount: 0,
+            mode: 'practice',
+            categoryId: params['categoryId'],
+            subcategory: params['subcategory'],
+            topic: params['topic'],
+          )
+        : await generateAcademicQuestions(
+            college: params['college'],
+            department: params['department'],
+            semester: params['semester'],
+            subject: params['subject'],
+            unit: params['unit'],
+            count: 10,
+            setCount: 0,
+            mode: 'practice',
+          );
   }
-  
-  // Generate questions for Test Mode (20 questions total - 2 separate API calls)
+
   static Future<List<Map<String, dynamic>>> generateTestQuestions({
     required String type,
     required Map<String, dynamic> params,
   }) async {
-    try {
-      List<Map<String, dynamic>> allQuestions = [];
-      
-      print('QUIZ_SERVICE: Generating test questions - First set of 10...');
-      
-      // Generate first set of 10 questions
-      List<Map<String, dynamic>> firstSet;
-      if (type == 'programming') {
-        firstSet = await generateProgrammingQuestions(
-          mainTopic: params['mainTopic'],
-          programmingLanguage: params['programmingLanguage'],
-          subTopic: params['subTopic'],
-          count: 10,
-          mode: 'test',
-          categoryId: params['categoryId'],
-          subcategory: params['subcategory'],
-          topic: params['topic'],
-        );
-      } else {
-        firstSet = await generateAcademicQuestions(
-          college: params['college'],
-          department: params['department'],
-          semester: params['semester'],
-          subject: params['subject'],
-          unit: params['unit'],
-          count: 10,
-          mode: 'test',
-        );
-      }
-      
-      firstSet = validateQuestions(firstSet);
-      if (firstSet.length < 8) {
-        throw Exception('First set has insufficient valid questions: ${firstSet.length}/10');
-      }
-      
-      allQuestions.addAll(firstSet);
-      print('QUIZ_SERVICE: First set generated - ${firstSet.length} questions');
-      
-      // Small delay between API calls
-      await Future.delayed(const Duration(seconds: 2));
-      
-      print('QUIZ_SERVICE: Generating test questions - Second set of 10...');
-      
-      // Generate second set of 10 questions
-      List<Map<String, dynamic>> secondSet;
-      if (type == 'programming') {
-        secondSet = await generateProgrammingQuestions(
-          mainTopic: params['mainTopic'],
-          programmingLanguage: params['programmingLanguage'],
-          subTopic: params['subTopic'],
-          count: 10,
-          mode: 'test',
-          categoryId: params['categoryId'],
-          subcategory: params['subcategory'],
-          topic: params['topic'],
-        );
-      } else {
-        secondSet = await generateAcademicQuestions(
-          college: params['college'],
-          department: params['department'],
-          semester: params['semester'],
-          subject: params['subject'],
-          unit: params['unit'],
-          count: 10,
-          mode: 'test',
-        );
-      }
-      
-      secondSet = validateQuestions(secondSet);
-      if (secondSet.length < 8) {
-        throw Exception('Second set has insufficient valid questions: ${secondSet.length}/10');
-      }
-      
-      allQuestions.addAll(secondSet);
-      print('QUIZ_SERVICE: Second set generated - ${secondSet.length} questions');
-      print('QUIZ_SERVICE: Total test questions generated: ${allQuestions.length}');
-      
-      if (allQuestions.length < 16) {
-        throw Exception('Insufficient total questions for test mode: ${allQuestions.length}/20');
-      }
-      
-      return allQuestions;
-    } catch (e) {
-      print('QUIZ_SERVICE: Error generating test questions: $e');
-      rethrow;
-    }
+    final List<Map<String, dynamic>> allQuestions = [];
+
+    final firstSet = (type == 'programming')
+        ? await generateProgrammingQuestions(
+            mainTopic: params['mainTopic'],
+            programmingLanguage: params['programmingLanguage'],
+            subTopic: params['subTopic'],
+            count: 10,
+            setCount: 0,
+            mode: 'test',
+            categoryId: params['categoryId'],
+            subcategory: params['subcategory'],
+            topic: params['topic'],
+          )
+        : await generateAcademicQuestions(
+            college: params['college'],
+            department: params['department'],
+            semester: params['semester'],
+            subject: params['subject'],
+            unit: params['unit'],
+            count: 10,
+            setCount: 0,
+            mode: 'test',
+          );
+
+    allQuestions.addAll(validateQuestions(firstSet));
+
+    await Future.delayed(const Duration(seconds: 2));
+
+    final secondSet = (type == 'programming')
+        ? await generateProgrammingQuestions(
+            mainTopic: params['mainTopic'],
+            programmingLanguage: params['programmingLanguage'],
+            subTopic: params['subTopic'],
+            count: 10,
+            setCount: 1,
+            mode: 'test',
+            categoryId: params['categoryId'],
+            subcategory: params['subcategory'],
+            topic: params['topic'],
+          )
+        : await generateAcademicQuestions(
+            college: params['college'],
+            department: params['department'],
+            semester: params['semester'],
+            subject: params['subject'],
+            unit: params['unit'],
+            count: 10,
+            setCount: 1,
+            mode: 'test',
+          );
+
+    allQuestions.addAll(validateQuestions(secondSet));
+
+    return allQuestions;
   }
-  
-  // Generate next batch of questions for practice mode
+
+  // NEW: Generate adaptive questions for practice mode
   static Future<List<Map<String, dynamic>>> generateNextPracticeBatch({
     required String type,
     required Map<String, dynamic> params,
+    int setCount = 1,
+    Map<String, dynamic>? performanceData,
   }) async {
-    try {
-      print('QUIZ_SERVICE: Generating next practice batch...');
-      return await generatePracticeQuestions(
-        type: type,
-        params: params,
-      );
-    } catch (e) {
-      print('QUIZ_SERVICE: Error generating next practice batch: $e');
-      rethrow;
-    }
+    return (type == 'programming')
+        ? await generateProgrammingQuestions(
+            mainTopic: params['mainTopic'],
+            programmingLanguage: params['programmingLanguage'],
+            subTopic: params['subTopic'],
+            count: 10,
+            setCount: setCount,
+            mode: 'practice',
+            categoryId: params['categoryId'],
+            subcategory: params['subcategory'],
+            topic: params['topic'],
+            performanceData: performanceData, // Pass performance data for adaptive generation
+          )
+        : await generateAcademicQuestions(
+            college: params['college'],
+            department: params['department'],
+            semester: params['semester'],
+            subject: params['subject'],
+            unit: params['unit'],
+            count: 10,
+            setCount: setCount,
+            mode: 'practice',
+            performanceData: performanceData, // Pass performance data for adaptive generation
+          );
   }
 
-  // Clear template cache (useful for testing or when templates are updated)
+  // NEW: Generate adaptive questions for test mode (remaining 12 questions after question 8)
+  static Future<List<Map<String, dynamic>>> generateAdaptiveTestQuestions({
+    required String type,
+    required Map<String, dynamic> params,
+    int count = 12,
+    required Map<String, dynamic> performanceData,
+  }) async {
+    return (type == 'programming')
+        ? await generateProgrammingQuestions(
+            mainTopic: params['mainTopic'],
+            programmingLanguage: params['programmingLanguage'],
+            subTopic: params['subTopic'],
+            count: count,
+            setCount: 1, // This is the second set for test
+            mode: 'test',
+            categoryId: params['categoryId'],
+            subcategory: params['subcategory'],
+            topic: params['topic'],
+            performanceData: performanceData, // Performance data from first 7 questions
+          )
+        : await generateAcademicQuestions(
+            college: params['college'],
+            department: params['department'],
+            semester: params['semester'],
+            subject: params['subject'],
+            unit: params['unit'],
+            count: count,
+            setCount: 1,
+            mode: 'test',
+            performanceData: performanceData, // Performance data from first 7 questions
+          );
+  }
+
   static void clearTemplateCache() {
     _templateCache.clear();
-    print('QUIZ_SERVICE: Template cache cleared');
   }
-  
-  // Rest of the existing methods remain the same...
+
   static Future<bool> checkServerHealth(String endpoint) async {
     try {
       final response = await http.get(
-        Uri.parse('${endpoint.replaceAll('/generate-questions', '/health').replaceAll('/quiz', '/health')}'),
-      ).timeout(Duration(seconds: 10));
-      
+        Uri.parse(endpoint.replaceAll('/generate-questions', '/health').replaceAll('/quiz', '/health')),
+      );
       return response.statusCode == 200;
-    } catch (e) {
-      print('QUIZ_SERVICE: Health check failed for $endpoint: $e');
+    } catch (_) {
       return false;
     }
   }
-  
+
   static Future<Map<String, dynamic>> getUserDataForQuiz() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final phoneNumber = prefs.getString('phone_number') ?? '';
-      
       return {
         'phone_number': phoneNumber,
         'timestamp': DateTime.now().toIso8601String(),
       };
-    } catch (e) {
-      print('QUIZ_SERVICE: Error getting user data: $e');
+    } catch (_) {
       return {
         'phone_number': 'unknown',
         'timestamp': DateTime.now().toIso8601String(),
       };
     }
   }
-  
+
   static bool isValidQuestion(Map<String, dynamic> question) {
     final requiredFields = ['question', 'options', 'correct_answer', 'explanation', 'difficulty', 'hint'];
-    
-    for (String field in requiredFields) {
-      if (!question.containsKey(field)) {
-        print('QUIZ_SERVICE: Missing field: $field');
-        return false;
-      }
+    for (var field in requiredFields) {
+      if (!question.containsKey(field)) return false;
     }
-    
-    if (question['options'] is! List || question['options'].length != 4) {
-      print('QUIZ_SERVICE: Invalid options format');
-      return false;
-    }
-    
-    if (!question['options'].contains(question['correct_answer'])) {
-      print('QUIZ_SERVICE: Correct answer not in options');
-      return false;
-    }
-    
-    return true;
+    return (question['options'] is List && question['options'].length == 4 &&
+        question['options'].contains(question['correct_answer']));
   }
-  
+
   static List<Map<String, dynamic>> validateQuestions(List<Map<String, dynamic>> questions) {
-    return questions.where((question) => isValidQuestion(question)).toList();
+    return questions.where((q) => isValidQuestion(q)).toList();
   }
 }

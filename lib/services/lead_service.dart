@@ -2,18 +2,17 @@ import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import '../../secure_storage.dart'; // ✅ Update with correct path if different
 
 class LeaderboardService {
   final FirebaseDatabase _database = FirebaseDatabase.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   
-  // Get current user's phone number
+  // ✅ Get current user's phone number
   Future<String?> _getCurrentUserPhone() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      return prefs.getString('phone_number');
+      return await SecureStorage.read('phone_number');
     } catch (e) {
       print('Error getting current user phone: $e');
       return null;
@@ -28,57 +27,46 @@ class LeaderboardService {
   }) async {
     try {
       final phoneNumber = await _getCurrentUserPhone();
-      if (phoneNumber == null) {
-        throw Exception('User not authenticated');
-      }
+      if (phoneNumber == null) throw Exception('User not authenticated');
       
-      // Get current user data using phone number
       final userDoc = await _firestore
           .collection('skillbench')
           .doc('ALL_USERS')
           .collection('users')
-          .doc(phoneNumber)  // Use phone number as document ID
+          .doc(phoneNumber)
           .get();
       
-      if (!userDoc.exists) {
-        throw Exception('User data not found');
-      }
+      if (!userDoc.exists) throw Exception('User data not found');
       
       final userData = userDoc.data()!;
       final int currentPoints = userData['points'] ?? 0;
       final int newPoints = currentPoints + pointsEarned;
       
-      // Get current date in format YYYY-MM-DD
       final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-      
-      // Get current week's start date (Monday)
       final now = DateTime.now();
       final weekStart = now.subtract(Duration(days: now.weekday - 1));
       final weekStartStr = DateFormat('yyyy-MM-dd').format(weekStart);
       
-      // Perform updates as a batch operation
       final batch = _firestore.batch();
       
-      // 1. Update user points in main user document
       final userRef = _firestore
           .collection('skillbench')
           .doc('ALL_USERS')
           .collection('users')
-          .doc(phoneNumber);  // Use phone number as document ID
+          .doc(phoneNumber);
           
       batch.update(userRef, {
         'points': newPoints,
         'last_activity': Timestamp.now(),
       });
       
-      // 2. Record activity in user history
       final activityRef = _firestore
           .collection('skillbench')
           .doc('ALL_USERS')
           .collection('users')
-          .doc(phoneNumber)  // Use phone number as document ID
+          .doc(phoneNumber)
           .collection('activities')
-          .doc(); // Auto-generate ID
+          .doc();
           
       batch.set(activityRef, {
         'activity': activity,
@@ -88,11 +76,8 @@ class LeaderboardService {
         'date': today,
       });
       
-      // Execute the batch
       await batch.commit();
       
-      // Update Realtime Database for leaderboards
-      // 1. Update all-time leaderboard using phone number as key
       await _database.ref()
           .child('skillbench/leaderboard/all_time/$phoneNumber')
           .update({
@@ -106,15 +91,11 @@ class LeaderboardService {
             'last_updated': ServerValue.timestamp,
           });
       
-      // 2. Update weekly leaderboard
       await _updateWeeklyLeaderboard(phoneNumber, userData, pointsEarned, weekStartStr);
       
-      // 3. Update college leaderboard
       if (userData.containsKey('college')) {
         await _updateCollegeLeaderboard(phoneNumber, userData, newPoints);
       }
-      
-      // 4. Update department leaderboard
       if (userData.containsKey('college') && userData.containsKey('department')) {
         await _updateDepartmentLeaderboard(phoneNumber, userData, newPoints);
       }
@@ -125,7 +106,6 @@ class LeaderboardService {
     }
   }
   
-  // Update weekly leaderboard
   Future<void> _updateWeeklyLeaderboard(
     String phoneNumber, 
     Map<String, dynamic> userData, 
@@ -133,14 +113,12 @@ class LeaderboardService {
     String weekStartStr,
   ) async {
     try {
-      // First check if user already exists in the weekly leaderboard
       final weeklyRef = _database.ref()
           .child('skillbench/leaderboard/weekly/$weekStartStr/$phoneNumber');
           
       final snapshot = await weeklyRef.get();
       
       if (snapshot.exists) {
-        // User exists, update points
         final data = snapshot.value as Map<dynamic, dynamic>;
         final currentPoints = data['points'] as int? ?? 0;
         final newPoints = currentPoints + pointsEarned;
@@ -150,7 +128,6 @@ class LeaderboardService {
           'last_updated': ServerValue.timestamp,
         });
       } else {
-        // User doesn't exist in weekly leaderboard, create new entry
         await weeklyRef.set({
           'points': pointsEarned,
           'username': userData['username'],
@@ -164,11 +141,9 @@ class LeaderboardService {
       }
     } catch (e) {
       print('Error updating weekly leaderboard: $e');
-      // Continue with other updates - non-critical
     }
   }
   
-  // Update college leaderboard
   Future<void> _updateCollegeLeaderboard(
     String phoneNumber, 
     Map<String, dynamic> userData, 
@@ -190,11 +165,9 @@ class LeaderboardService {
           });
     } catch (e) {
       print('Error updating college leaderboard: $e');
-      // Continue with other updates - non-critical
     }
   }
   
-  // Update department leaderboard
   Future<void> _updateDepartmentLeaderboard(
     String phoneNumber, 
     Map<String, dynamic> userData, 
@@ -216,23 +189,18 @@ class LeaderboardService {
           });
     } catch (e) {
       print('Error updating department leaderboard: $e');
-      // Continue with other updates - non-critical
     }
   }
-  
-  // Reset weekly leaderboards (should be called by a Cloud Function)
+
   Future<void> resetWeeklyLeaderboards() async {
     try {
-      // Get previous week's start date
       final now = DateTime.now();
       final previousWeekStart = now.subtract(Duration(days: now.weekday + 6));
       final previousWeekStartStr = DateFormat('yyyy-MM-dd').format(previousWeekStart);
       
-      // Get new week's start date
       final weekStart = now.subtract(Duration(days: now.weekday - 1));
       final weekStartStr = DateFormat('yyyy-MM-dd').format(weekStart);
       
-      // Archive previous week's data
       final previousWeekRef = _database.ref()
           .child('skillbench/leaderboard/weekly/$previousWeekStartStr');
           
@@ -240,24 +208,18 @@ class LeaderboardService {
       
       if (snapshot.exists) {
         final data = snapshot.value as Map<dynamic, dynamic>;
-        
-        // Store in archive
         await _database.ref()
             .child('skillbench/leaderboard/weekly_archive/$previousWeekStartStr')
             .set(data);
-            
-        // Clear previous week's data
         await previousWeekRef.remove();
       }
       
-      // Initialize new week if needed (this is optional)
       final newWeekRef = _database.ref()
           .child('skillbench/leaderboard/weekly/$weekStartStr');
           
       final newWeekSnapshot = await newWeekRef.get();
       
       if (!newWeekSnapshot.exists) {
-        // Create placeholder to indicate week has started
         await newWeekRef.child('info').set({
           'week_start': weekStartStr,
           'created_at': ServerValue.timestamp,
@@ -268,14 +230,12 @@ class LeaderboardService {
       throw e;
     }
   }
-  
-  // Get user ranking
+
   Future<int> getUserRanking(String filter) async {
     try {
       final phoneNumber = await _getCurrentUserPhone();
       if (phoneNumber == null) return 0;
       
-      // Determine which leaderboard to query
       DatabaseReference leaderboardRef;
       
       switch (filter) {
@@ -286,40 +246,29 @@ class LeaderboardService {
           leaderboardRef = _database.ref()
               .child('skillbench/leaderboard/weekly/$weekStartStr');
           break;
-          
         case 'all_time':
-          leaderboardRef = _database.ref()
-              .child('skillbench/leaderboard/all_time');
-          break;
-          
         default:
           leaderboardRef = _database.ref()
               .child('skillbench/leaderboard/all_time');
       }
       
-      // Get all users and sort by points
       final snapshot = await leaderboardRef.orderByChild('points').get();
-      
       if (!snapshot.exists) return 0;
       
       final data = snapshot.value as Map<dynamic, dynamic>;
-      
-      // Convert to list and sort by points (descending)
       final List<MapEntry<dynamic, dynamic>> usersList = data.entries.toList();
+      
       usersList.sort((a, b) {
-        final aPoints = (a.value as Map<dynamic, dynamic>)['points'] as int? ?? 0;
-        final bPoints = (b.value as Map<dynamic, dynamic>)['points'] as int? ?? 0;
+        final aPoints = (a.value as Map)['points'] ?? 0;
+        final bPoints = (b.value as Map)['points'] ?? 0;
         return bPoints.compareTo(aPoints);
       });
       
-      // Find current user's position using phone number
       for (int i = 0; i < usersList.length; i++) {
-        if (usersList[i].key == phoneNumber) {
-          return i + 1; // +1 because ranks start at 1, not 0
-        }
+        if (usersList[i].key == phoneNumber) return i + 1;
       }
       
-      return 0; // User not found
+      return 0;
     } catch (e) {
       print('Error getting user ranking: $e');
       return 0;

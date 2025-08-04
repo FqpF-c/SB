@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/progress_provider.dart';
 import '../../theme/default_theme.dart';
 import '../global/mode_selection_card.dart';
 
@@ -38,12 +39,15 @@ class _AcademicsScreenState extends State<AcademicsScreen> with TickerProviderSt
   late AnimationController _slideController;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
+  
+  late ProgressProvider _progressProvider;
 
   @override
   void initState() {
     super.initState();
     _initializeAnimations();
     _loadUserData();
+    _progressProvider = Provider.of<ProgressProvider>(context, listen: false);
   }
 
   void _initializeAnimations() {
@@ -357,6 +361,45 @@ class _AcademicsScreenState extends State<AcademicsScreen> with TickerProviderSt
     );
   }
 
+  String _generateUnitProgressId(String unit) {
+    return 'academic_${userCollege ?? ''}_${selectedDepartment ?? ''}_${selectedSemester ?? ''}_${selectedSubject ?? ''}_$unit'
+        .replaceAll(' ', '_')
+        .replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '')
+        .toLowerCase();
+  }
+
+  double _getUnitProgress(String unit) {
+    final unitId = _generateUnitProgressId(unit);
+    return _progressProvider.getProgressForTopic(unitId);
+  }
+
+  int _getUnitProgressPercentage(String unit) {
+    final unitId = _generateUnitProgressId(unit);
+    return _progressProvider.getProgressPercentage(unitId);
+  }
+
+  bool _hasUnitProgress(String unit) {
+    final unitId = _generateUnitProgressId(unit);
+    return _progressProvider.hasProgress(unitId);
+  }
+
+  double _getSubjectOverallProgress(String subject) {
+    if (units.isEmpty) return 0.0;
+    
+    double totalProgress = 0.0;
+    int progressCount = 0;
+    
+    for (String unit in units) {
+      final unitId = _generateUnitProgressId(unit);
+      if (_progressProvider.hasProgress(unitId)) {
+        totalProgress += _progressProvider.getProgressForTopic(unitId);
+        progressCount++;
+      }
+    }
+    
+    return progressCount > 0 ? totalProgress / progressCount : 0.0;
+  }
+
   Widget _buildCategoryHeader() {
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 80, 16, 12),
@@ -664,18 +707,22 @@ class _AcademicsScreenState extends State<AcademicsScreen> with TickerProviderSt
   }
 
   Widget _buildSubjectsSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (isLoadingSubjects)
-          _buildLoadingCard()
-        else
-          ...subjects.asMap().entries.map((entry) {
-            final index = entry.key;
-            final subject = entry.value;
-            return _buildSubjectCard(subject, index);
-          }).toList(),
-      ],
+    return Consumer<ProgressProvider>(
+      builder: (context, progressProvider, child) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (isLoadingSubjects)
+              _buildLoadingCard()
+            else
+              ...subjects.asMap().entries.map((entry) {
+                final index = entry.key;
+                final subject = entry.value;
+                return _buildSubjectCard(subject, index);
+              }).toList(),
+          ],
+        );
+      },
     );
   }
 
@@ -718,6 +765,8 @@ class _AcademicsScreenState extends State<AcademicsScreen> with TickerProviderSt
 
   Widget _buildSubjectCard(String subject, int index) {
     final isExpanded = expandedSubjectIndex == index;
+    final subjectProgress = isExpanded && units.isNotEmpty ? _getSubjectOverallProgress(subject) : 0.0;
+    final subjectProgressPercentage = (subjectProgress * 100).round();
     
     return Card(
       margin: const EdgeInsets.only(bottom: 16, left: 16, right: 16),
@@ -743,43 +792,92 @@ class _AcademicsScreenState extends State<AcademicsScreen> with TickerProviderSt
             },
             child: Padding(
               padding: const EdgeInsets.all(16),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: Text(
-                      subject,
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: isExpanded 
-                            ? Color.fromRGBO(223, 103, 140, 1)
-                            : Color.fromRGBO(61, 21, 96, 1),
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  if (isLoadingUnits && expandedSubjectIndex == index)
-                    SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          Color.fromRGBO(219, 112, 147, 1),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          subject,
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: isExpanded 
+                                ? Color.fromRGBO(223, 103, 140, 1)
+                                : Color.fromRGBO(61, 21, 96, 1),
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                    )
-                  else
-                    AnimatedRotation(
-                      turns: isExpanded ? 0.5 : 0,
-                      duration: const Duration(milliseconds: 300),
-                      child: Icon(
-                        Icons.keyboard_arrow_down,
-                        color: Color.fromRGBO(61, 21, 96, 1),
-                        size: 24,
+                      if (isLoadingUnits && expandedSubjectIndex == index)
+                        SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Color.fromRGBO(219, 112, 147, 1),
+                            ),
+                          ),
+                        )
+                      else
+                        AnimatedRotation(
+                          turns: isExpanded ? 0.5 : 0,
+                          duration: const Duration(milliseconds: 300),
+                          child: Icon(
+                            Icons.keyboard_arrow_down,
+                            color: Color.fromRGBO(61, 21, 96, 1),
+                            size: 24,
+                          ),
+                        ),
+                    ],
+                  ),
+                  if (isExpanded && units.isNotEmpty) ...[
+                    SizedBox(height: 12),
+                    Container(
+                      padding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Color.fromRGBO(248, 241, 245, 1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(width: 4),
+                          Container(
+                            width: MediaQuery.of(context).size.width * 0.3,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(3),
+                            ),
+                            child: FractionallySizedBox(
+                              alignment: Alignment.centerLeft,
+                              widthFactor: subjectProgress,
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: Color.fromRGBO(219, 112, 147, 1),
+                                  borderRadius: BorderRadius.circular(3),
+                                ),
+                              ),
+                            ),
+                          ),
+                          SizedBox(width: 8),
+                          Text(
+                            '$subjectProgressPercentage%',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Color.fromRGBO(61, 21, 96, 1),
+                            ),
+                          ),
+                          SizedBox(width: 4),
+                        ],
                       ),
                     ),
+                  ],
                 ],
               ),
             ),
@@ -820,86 +918,149 @@ class _AcademicsScreenState extends State<AcademicsScreen> with TickerProviderSt
   }
 
   Widget _buildUnitItem(String unit) {
-    return InkWell(
-      onTap: () => _onUnitSelected(unit),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: Color.fromRGBO(249, 248, 250, 1),
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 4,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              unit,
-              style: TextStyle(
-                fontSize: 16,
-                color: Color.fromRGBO(61, 21, 96, 1),
-                fontWeight: FontWeight.w600,
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-            SizedBox(height: 12),
-            Row(
-              children: [
-                Container(
-                  padding: EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                  decoration: BoxDecoration(
-                    color: Color.fromRGBO(248, 241, 245, 1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      SizedBox(width: 4),
-                      Container(
-                        width: MediaQuery.of(context).size.width * 0.32,
-                        height: 6,
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(3),
-                        ),
-                        child: FractionallySizedBox(
-                          alignment: Alignment.centerLeft,
-                          widthFactor: 0,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: Color.fromRGBO(219, 112, 147, 1),
-                              borderRadius: BorderRadius.circular(3),
-                            ),
-                          ),
-                        ),
-                      ),
-                      SizedBox(width: 8),
-                      Text(
-                        '0%',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: Color.fromRGBO(61, 21, 96, 1),
-                        ),
-                      ),
-                      SizedBox(width: 4),
-                    ],
-                  ),
+    return Consumer<ProgressProvider>(
+      builder: (context, progressProvider, child) {
+        final progress = _getUnitProgress(unit);
+        final percentage = _getUnitProgressPercentage(unit);
+        final hasProgress = _hasUnitProgress(unit);
+        
+        return InkWell(
+          onTap: () => _onUnitSelected(unit),
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Color.fromRGBO(249, 248, 250, 1),
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
                 ),
-                Expanded(child: Container()),
               ],
             ),
-          ],
-        ),
-      ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        unit,
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Color.fromRGBO(61, 21, 96, 1),
+                          fontWeight: FontWeight.w600,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (hasProgress) ...[
+                      Container(
+                        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: _getProgressColor(progress),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              _getProgressIcon(progress),
+                              size: 12,
+                              color: Colors.white,
+                            ),
+                            SizedBox(width: 4),
+                            Text(
+                              _getProgressLabel(progress),
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                SizedBox(height: 12),
+                Row(
+                  children: [
+                    Container(
+                      padding: EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: Color.fromRGBO(248, 241, 245, 1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(width: 4),
+                          Container(
+                            width: MediaQuery.of(context).size.width * 0.32,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(3),
+                            ),
+                            child: FractionallySizedBox(
+                              alignment: Alignment.centerLeft,
+                              widthFactor: progress,
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: Color.fromRGBO(219, 112, 147, 1),
+                                  borderRadius: BorderRadius.circular(3),
+                                ),
+                              ),
+                            ),
+                          ),
+                          SizedBox(width: 8),
+                          Text(
+                            '$percentage%',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Color.fromRGBO(61, 21, 96, 1),
+                            ),
+                          ),
+                          SizedBox(width: 4),
+                        ],
+                      ),
+                    ),
+                    Expanded(child: Container()),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
+  }
+
+  Color _getProgressColor(double progress) {
+    if (progress >= 0.8) return Colors.green;
+    if (progress >= 0.6) return Colors.orange;
+    if (progress >= 0.3) return Colors.blue;
+    return Colors.grey;
+  }
+
+  IconData _getProgressIcon(double progress) {
+    if (progress >= 0.8) return Icons.star;
+    if (progress >= 0.6) return Icons.trending_up;
+    if (progress >= 0.3) return Icons.play_arrow;
+    return Icons.play_circle_outline;
+  }
+
+  String _getProgressLabel(double progress) {
+    if (progress >= 0.8) return 'Mastered';
+    if (progress >= 0.6) return 'Good';
+    if (progress >= 0.3) return 'Learning';
+    return 'Started';
   }
 
   @override

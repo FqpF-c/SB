@@ -1,30 +1,66 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 
-import 'package:skillbench/main.dart';
+import '../lib/main.dart';
+import '../lib/providers/auth_provider.dart';
+import '../lib/providers/theme_provider.dart';
+import '../lib/providers/progress_provider.dart';
+import '../lib/providers/lead_provider.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('SkillBench app smoke test', (WidgetTester tester) async {
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider(create: (_) => AuthProvider()),
+          ChangeNotifierProvider(create: (_) => ThemeProvider()),
+          ChangeNotifierProvider(create: (_) => ProgressProvider()),
+          ChangeNotifierProvider(create: (_) => LeadProvider()),
+        ],
+        child: const MyApp(),
+      ),
+    );
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    // Verify that the MaterialApp is created
+    expect(find.byType(MaterialApp), findsOneWidget);
+    
+    // Verify that ScreenUtilInit is present (for responsive design)
+    expect(find.byType(ScreenUtilInit), findsOneWidget);
+    
+    // Verify that AuthCheckScreen is the initial screen
+    expect(find.byType(AuthCheckScreen), findsOneWidget);
+    
+    // Since AuthCheckScreen shows loading initially, verify CircularProgressIndicator
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+  });
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+  testWidgets('MyApp widget creates MaterialApp with correct properties', (WidgetTester tester) async {
+    // Test just the MyApp widget without providers
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider(create: (_) => AuthProvider()),
+          ChangeNotifierProvider(create: (_) => ThemeProvider()),
+          ChangeNotifierProvider(create: (_) => ProgressProvider()),
+          ChangeNotifierProvider(create: (_) => LeadProvider()),
+        ],
+        child: const MyApp(),
+      ),
+    );
+
+    // Find the MaterialApp widget
+    final materialAppFinder = find.byType(MaterialApp);
+    expect(materialAppFinder, findsOneWidget);
+
+    // Get the MaterialApp widget to check its properties
+    final MaterialApp materialApp = tester.widget(materialAppFinder);
+    
+    // Verify app properties
+    expect(materialApp.debugShowCheckedModeBanner, false);
+    expect(materialApp.title, 'Skill Bench');
+    expect(materialApp.home, isA<AuthCheckScreen>());
   });
 }

@@ -6,56 +6,55 @@ class AppTheme {
   // Primary and secondary colors
   static const Color primaryColor = Color(0xFF3D1560);
   static const Color secondaryColor = Color(0xFFDF678C);
-  
+
   // Background colors
   static const Color backgroundColor = Colors.white;
   static const Color lightPurpleBackground = Color(0xFFF9F1FF);
-  
+
   // Text colors
   static const Color textPrimaryColor = Color(0xFF3D1560);
   static const Color textSecondaryColor = Color(0xFFDF678C);
   static const Color textDarkColor = Color(0xFF333333);
   static const Color textLightColor = Color(0xFF767676);
-  
+
   // Accent colors
   static const Color accentColor = Color(0xFFE37A8E); // Slightly lighter pink
   static const Color highlightColor = Color(0xFFF5EEFB); // Very light purple
-  
+
   // Button variants
   static final Color primaryButtonColor = secondaryColor;
   static final Color secondaryButtonColor = primaryColor;
   static final Color disabledButtonColor = Colors.grey.shade400;
-  
+
   // Border colors
   static final Color borderColor = Colors.grey.shade300;
-  
+
   // Status colors
   static const Color successColor = Color(0xFF4CAF50);
   static const Color errorColor = Color(0xFFE53935);
   static const Color warningColor = Color(0xFFFFB74D);
   static const Color infoColor = Color(0xFF2196F3);
-  
+
   // Get default theme data
   static ThemeData get defaultTheme {
     return ThemeData(
       // Base colors
       primaryColor: primaryColor,
       scaffoldBackgroundColor: backgroundColor,
-      
+
       // Color scheme
       colorScheme: ColorScheme.light(
         primary: primaryColor,
         secondary: secondaryColor,
-        background: backgroundColor,
         surface: backgroundColor,
         onPrimary: Colors.white,
         onSecondary: Colors.white,
-        onBackground: textDarkColor,
         onSurface: textDarkColor,
         error: errorColor,
         onError: Colors.white,
       ),
-      
+      useMaterial3: true,
+
       // Typography - using Roboto from Google Fonts
       textTheme: GoogleFonts.robotoTextTheme().copyWith(
         displayLarge: GoogleFonts.roboto(
@@ -119,7 +118,7 @@ class AppTheme {
           color: Colors.white,
         ),
       ),
-      
+
       // App bar theme
       appBarTheme: AppBarTheme(
         backgroundColor: Colors.transparent,
@@ -134,7 +133,7 @@ class AppTheme {
           color: primaryColor,
         ),
       ),
-      
+
       // Button themes
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
@@ -155,7 +154,7 @@ class AppTheme {
           minimumSize: Size(double.infinity, 50.h),
         ),
       ),
-      
+
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: primaryColor,
@@ -174,7 +173,7 @@ class AppTheme {
           minimumSize: Size(double.infinity, 50.h),
         ),
       ),
-      
+
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: primaryColor,
@@ -191,7 +190,7 @@ class AppTheme {
           ),
         ),
       ),
-      
+
       // Input decoration theme
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
@@ -216,6 +215,10 @@ class AppTheme {
           borderRadius: BorderRadius.circular(8.r),
           borderSide: BorderSide(color: errorColor, width: 1.5),
         ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8.r),
+          borderSide: BorderSide(color: errorColor, width: 1.5),
+        ),
         hintStyle: GoogleFonts.roboto(
           fontSize: 16.sp,
           color: Colors.grey,
@@ -225,20 +228,20 @@ class AppTheme {
           color: errorColor,
         ),
       ),
-      
+
       // Card theme
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         color: Colors.white,
         elevation: 2,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12.r),
+          borderRadius: BorderRadius.all(Radius.circular(12.r)),
         ),
         margin: EdgeInsets.symmetric(
           horizontal: 16.w,
           vertical: 8.h,
         ),
       ),
-      
+
       // Bottom navigation bar theme
       bottomNavigationBarTheme: BottomNavigationBarThemeData(
         backgroundColor: Colors.white,
@@ -255,7 +258,7 @@ class AppTheme {
         type: BottomNavigationBarType.fixed,
         elevation: 8,
       ),
-      
+
       // Chip theme
       chipTheme: ChipThemeData(
         backgroundColor: highlightColor,
@@ -274,11 +277,10 @@ class AppTheme {
           fontSize: 14.sp,
           color: Colors.white,
         ),
-        brightness: Brightness.light,
       ),
-      
+
       // Dialog theme
-      dialogTheme: DialogTheme(
+      dialogTheme: DialogThemeData(
         backgroundColor: Colors.white,
         elevation: 24,
         shape: RoundedRectangleBorder(
@@ -294,7 +296,7 @@ class AppTheme {
           color: textDarkColor,
         ),
       ),
-      
+
       // Snackbar theme
       snackBarTheme: SnackBarThemeData(
         backgroundColor: textDarkColor,
@@ -307,25 +309,25 @@ class AppTheme {
         ),
         behavior: SnackBarBehavior.floating,
       ),
-      
+
       // Progress indicator theme
       progressIndicatorTheme: const ProgressIndicatorThemeData(
         color: secondaryColor,
         circularTrackColor: highlightColor,
         linearTrackColor: highlightColor,
       ),
-      
+
       // Divider theme
       dividerTheme: DividerThemeData(
         color: borderColor,
         thickness: 1,
         space: 24.h,
       ),
-      
+
       // Checkbox theme
       checkboxTheme: CheckboxThemeData(
-        fillColor: MaterialStateProperty.resolveWith<Color>((states) {
-          if (states.contains(MaterialState.disabled)) {
+        fillColor: WidgetStateProperty.resolveWith<Color>((states) {
+          if (states.contains(WidgetState.disabled)) {
             return Colors.grey.shade400;
           }
           return primaryColor;
@@ -334,34 +336,39 @@ class AppTheme {
           borderRadius: BorderRadius.circular(4.r),
         ),
       ),
-      
+
       // Radio theme
       radioTheme: RadioThemeData(
-        fillColor: MaterialStateProperty.resolveWith<Color>((states) {
-          if (states.contains(MaterialState.disabled)) {
+        fillColor: WidgetStateProperty.resolveWith<Color>((states) {
+          if (states.contains(WidgetState.disabled)) {
             return Colors.grey.shade400;
           }
           return primaryColor;
         }),
       ),
-      
+
       // Switch theme
       switchTheme: SwitchThemeData(
-        thumbColor: MaterialStateProperty.resolveWith<Color>((states) {
-          if (states.contains(MaterialState.disabled)) {
+        thumbColor: WidgetStateProperty.resolveWith<Color>((states) {
+          if (states.contains(WidgetState.disabled)) {
             return Colors.grey.shade400;
           }
-          if (states.contains(MaterialState.selected)) {
+          if (states.contains(WidgetState.selected)) {
             return primaryColor;
           }
           return Colors.white;
         }),
-        trackColor: MaterialStateProperty.resolveWith<Color>((states) {
-          if (states.contains(MaterialState.disabled)) {
+        trackColor: WidgetStateProperty.resolveWith<Color>((states) {
+          if (states.contains(WidgetState.disabled)) {
             return Colors.grey.shade300;
           }
-          if (states.contains(MaterialState.selected)) {
-            return primaryColor.withOpacity(0.5);
+          if (states.contains(WidgetState.selected)) {
+            return Color.fromRGBO(
+              (primaryColor.red),
+              (primaryColor.green),
+              (primaryColor.blue),
+              0.5,
+            );
           }
           return Colors.grey.shade300;
         }),

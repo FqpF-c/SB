@@ -42,6 +42,7 @@ class _NavBarState extends State<NavBar> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: _screens[_currentIndex],
+      extendBody: true,
       bottomNavigationBar: Padding(
         padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
         child: Container(
@@ -67,7 +68,9 @@ class _NavBarState extends State<NavBar> {
                     vertical: 8.h,
                   ),
                   decoration: BoxDecoration(
-                    color: isSelected ? const Color(0xFFE471A0) : Colors.transparent,
+                    color: isSelected
+                        ? const Color(0xFFE471A0)
+                        : Colors.transparent,
                     borderRadius: BorderRadius.circular(30.r),
                   ),
                   child: Row(

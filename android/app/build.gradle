@@ -15,8 +15,8 @@ if (keystorePropertiesFile.exists()) {
 }
 
 android {
-    namespace = "com.novelapps.skillbench"
-    compileSdk = flutter.compileSdkVersion
+    namespace = "io.novelapps.skillbench"
+    compileSdk = 35  // Change this from flutter.compileSdkVersion to 35
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

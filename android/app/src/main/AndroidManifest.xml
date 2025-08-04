@@ -1,5 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.novelapps.skillbench">
+    package="io.novelapps.skillbench">
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <application
         android:enableOnBackInvokedCallback="true"
         android:label="skillbench"

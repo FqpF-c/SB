@@ -8,10 +8,11 @@ import 'package:provider/provider.dart';
 import 'dart:math' show pi, cos, sin;
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
+import '../../secure_storage.dart';
 import '../../providers/auth_provider.dart';
-import '../../theme/default_theme.dart';
 import '../../widgets/home/ongoing_programs_widget.dart';
+import '../../theme/default_theme.dart';
+import '../../widgets/home/stats_row_widget.dart';
 import '../../widgets/home/technologies_widget.dart';
 import '../../widgets/home/programming_languages_widget.dart';
 
@@ -309,9 +310,8 @@ static const Map<String, String> _topicAssetMap = {
     try {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       
-      // Get phone number from SharedPreferences
-      final prefs = await SharedPreferences.getInstance();
-      final phoneNumber = prefs.getString('phone_number');
+      final phoneNumber = await SecureStorage.read('phone_number');
+
 
       if (phoneNumber == null) {
         if (mounted) {
@@ -758,53 +758,9 @@ static const Map<String, String> _topicAssetMap = {
   }
 
   Widget _buildStatsBox() {
-    return Transform.translate(
-      offset: const Offset(0, -65),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.fromLTRB(20, 65, 20, 15),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFFE17DA8), Color(0xFFE15E89)],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
-          borderRadius: const BorderRadius.only(
-            bottomLeft: Radius.circular(48),
-            bottomRight: Radius.circular(48),
-          ),
-        ),
-        child: Column(
-          children: [
-            SizedBox(height: 15),
-            
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _buildStatItem(
-                  icon: Icons.check_circle_outline,
-                  label: "Completed",
-                  value: _completed.toString(),
-                ),
-                Container(height: 40, width: 1, color: Colors.white.withOpacity(0.3)),
-                _buildStatItem(
-                  icon: Icons.leaderboard,
-                  label: "Rank Position",
-                  value: _rankPosition.toString(),
-                ),
-                Container(height: 40, width: 1, color: Colors.white.withOpacity(0.3)),
-                _buildStatItem(
-                  icon: Icons.access_time,
-                  label: "Study Hours",
-                  value: _studyHours.toString(),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  // Import your new Firebase stats widget at the top of the file
+  return FirebaseStatsRowWidget();
+}
 
   Widget _buildStatItem({
     required IconData icon,

@@ -14,6 +14,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'settings_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({Key? key}) : super(key: key);
@@ -751,95 +752,104 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
             backgroundColor: Colors.transparent,
             elevation: 0,
             flexibleSpace: Stack(
-              clipBehavior: Clip.none,
-              alignment: Alignment.bottomCenter,
-              children: [
-                // Main pink header with pattern
-                Positioned.fill(
-                  child: Container(
-                    decoration: const BoxDecoration(
-                      color: Color.fromRGBO(223, 103, 140, 1), // Updated to RGB 223, 103, 140
-                      borderRadius: BorderRadius.only(
-                        bottomLeft: Radius.circular(55),
-                        bottomRight: Radius.circular(55),
-                      ),
-                    ),
-                    child: Stack(
-                      children: [
-                        // Curved pattern overlay in top-right
-                        Positioned(
-                          top: 0,
-                          right: 0,
-                          child: SizedBox(
-                            width: MediaQuery.of(context).size.width * 0.8, // 80% of screen width
-                            height: 170,
-                            child: Align(
-                              alignment: Alignment.topRight,
-                              child: Image.asset(
-                                'assets/profile_page/Profile_design.png',
-                                fit: BoxFit.cover,
-                                alignment: Alignment.topRight, // Align to top right corner
-                                errorBuilder: (context, error, stackTrace) {
-                                  return const SizedBox();
-                                },
-                              ),
-                            ),
-                          ),
-                        ),
-                        // Back button
-                        SafeArea(
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.start,
-                              children: [
-                                IconButton(
-                                  icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
-                                  onPressed: () {
-                                    Navigator.pop(context);
-                                  },
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+  clipBehavior: Clip.none,
+  alignment: Alignment.bottomCenter,
+  children: [
+    // Main pink header with pattern
+    Positioned.fill(
+      child: Container(
+        decoration: const BoxDecoration(
+          color: Color.fromRGBO(223, 103, 140, 1),
+          borderRadius: BorderRadius.only(
+            bottomLeft: Radius.circular(55),
+            bottomRight: Radius.circular(55),
+          ),
+        ),
+        child: Stack(
+          children: [
+            // Curved pattern overlay
+            Positioned(
+              top: 0,
+              right: 0,
+              child: SizedBox(
+                width: MediaQuery.of(context).size.width * 0.8,
+                height: 170,
+                child: Align(
+                  alignment: Alignment.topRight,
+                  child: Image.asset(
+                    'assets/profile_page/Profile_design.png',
+                    fit: BoxFit.cover,
+                    alignment: Alignment.topRight,
+                    errorBuilder: (context, error, stackTrace) {
+                      return const SizedBox();
+                    },
                   ),
                 ),
-                          
-                // Profile image positioned to create "notch" effect
-                Positioned(
-                  bottom: -70,
-                  child: GestureDetector(
-                    onTap: _showImagePickerOptions,
-                    child: Container(
-                      width: 155,
-                      height: 155,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: const Color.fromRGBO(255, 207, 222, 1), // Changed from Color(0xFFDF678C) to RGB 255 207 222
-                          width: 0.5,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                        color: const Color(0xFFF8E1EC), // Light pink background
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(70),
-                        child: _buildProfileImage(), // Use the new method
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+              ),
             ),
+          ],
+        ),
+      ),
+    ),
+
+    // Back button (unchanged)
+    Positioned(
+      top: 40,
+      left: 16,
+      child: IconButton(
+        icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
+        onPressed: (){},
+      ),
+    ),
+
+    // ✅ Settings button — TOP RIGHT
+    Positioned(
+      top: 40,
+      right: 16,
+      child: IconButton(
+        icon: const Icon(Icons.settings, color: Colors.white),
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const SettingsScreen()),
+          );
+        },
+      ),
+    ),
+
+    // Profile image “notch” (unchanged)
+    Positioned(
+      bottom: -70,
+      child: GestureDetector(
+        onTap: _showImagePickerOptions,
+        child: Container(
+          width: 155,
+          height: 155,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: const Color.fromRGBO(255, 207, 222, 1),
+              width: 0.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+            color: const Color(0xFFF8E1EC),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(70),
+            child: _buildProfileImage(),
+          ),
+        ),
+      ),
+    ),
+  ],
+),
+
           ),
           
           // Main content

@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'dart:async';
 import '../../providers/auth_provider.dart';
+import '../../services/quiz_storage_service.dart';
 import '../../theme/default_theme.dart';
 import 'quiz_result_screen.dart';
 
@@ -13,6 +14,7 @@ class TestModeScreen extends StatefulWidget {
   final String topicName;
   final String subtopicName;
   final List<Map<String, dynamic>> questions;
+  final String? sessionId;
 
   const TestModeScreen({
     Key? key,
@@ -21,6 +23,7 @@ class TestModeScreen extends StatefulWidget {
     required this.topicName,
     required this.subtopicName,
     required this.questions,
+    this.sessionId,
   }) : super(key: key);
 
   @override
@@ -38,14 +41,24 @@ class _TestModeScreenState extends State<TestModeScreen>
   List<String?> _selectedAnswers = [];
   bool _isSubmitted = false;
   bool _isLoading = false;
-  
+  bool _isDisposed = false; // Add disposed flag
+
   Timer? _quizTimer;
+  Timer? _timeTracker;
   int _timeRemaining = 1200;
   bool _showTimeWarning = false;
-  
+
   int _correctAnswers = 0;
   int _totalXP = 0;
   List<Map<String, dynamic>> _questionHistory = [];
+
+  // Performance tracking for analytics (but no adaptive generation)
+  List<Map<String, dynamic>> _performanceData = [];
+
+  String? _sessionId;
+  int _sessionStartTime = 0;
+  Map<int, int> _questionStartTimes = {};
+  Map<int, int> _questionAnswerTimes = {};
 
   @override
   void initState() {
@@ -53,6 +66,7 @@ class _TestModeScreenState extends State<TestModeScreen>
     _initializeAnimations();
     _initializeQuiz();
     _startTimer();
+    _startTimeTracking();
   }
 
   void _initializeAnimations() {
@@ -88,78 +102,290 @@ class _TestModeScreenState extends State<TestModeScreen>
       return;
     }
     _selectedAnswers = List.filled(widget.questions.length, null);
+    _sessionId = widget.sessionId;
+
+    _questionStartTimes[0] = DateTime.now().millisecondsSinceEpoch;
+
+    print('TEST: Session ID: $_sessionId');
+    print('TEST: Total questions: ${widget.questions.length}');
   }
 
   void _startTimer() {
     _quizTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (mounted) {
-        setState(() {
-          if (_timeRemaining > 0) {
-            _timeRemaining--;
-            _showTimeWarning = _timeRemaining <= 300;
-          } else {
-            _autoSubmitQuiz();
-          }
-        });
+      if (_isDisposed || !mounted) {
+        timer.cancel();
+        return;
       }
+
+      setState(() {
+        if (_timeRemaining > 0) {
+          _timeRemaining--;
+          _showTimeWarning = _timeRemaining <= 300;
+        } else {
+          _autoSubmitQuiz();
+        }
+      });
+    });
+  }
+
+  void _startTimeTracking() {
+    _sessionStartTime = DateTime.now().millisecondsSinceEpoch;
+
+    _timeTracker = Timer.periodic(const Duration(seconds: 10), (timer) {
+      if (_isDisposed || !mounted) {
+        timer.cancel();
+        return;
+      }
+      // Track session duration
     });
   }
 
   @override
   void dispose() {
+    _isDisposed = true; // Set disposed flag first
+
     _slideController.dispose();
     _timerController.dispose();
     _quizTimer?.cancel();
+    _timeTracker?.cancel();
+
+    // Store abandonment only if session exists and not submitted
+    if (_sessionId != null && !_isSubmitted) {
+      // Fire and forget - don't await in dispose
+      _storeQuizAbandonment();
+    }
+
     super.dispose();
   }
 
   Map<String, dynamic>? get _currentQuestion {
-    if (widget.questions.isEmpty || _currentQuestionIndex >= widget.questions.length || _currentQuestionIndex < 0) {
+    if (widget.questions.isEmpty ||
+        _currentQuestionIndex >= widget.questions.length ||
+        _currentQuestionIndex < 0) {
       return null;
     }
     return widget.questions[_currentQuestionIndex];
   }
 
+  // Performance analysis for tracking weak areas (analytics only)
+  Map<String, dynamic> _analyzePerformance() {
+    if (_performanceData.isEmpty) return {};
+
+    Map<String, Map<String, dynamic>> topicAnalysis = {};
+    Map<String, Map<String, dynamic>> difficultyAnalysis = {};
+
+    for (var data in _performanceData) {
+      String topic = data['topic'] ?? 'General';
+      String difficulty = data['difficulty'] ?? 'Medium';
+      bool isCorrect = data['isCorrect'] ?? false;
+      int timeSpent = data['timeSpent'] ?? 30;
+
+      // Topic analysis
+      if (!topicAnalysis.containsKey(topic)) {
+        topicAnalysis[topic] = {
+          'total': 0,
+          'correct': 0,
+          'totalTime': 0,
+          'questions': [],
+        };
+      }
+      topicAnalysis[topic]!['total'] += 1;
+      if (isCorrect) topicAnalysis[topic]!['correct'] += 1;
+      topicAnalysis[topic]!['totalTime'] += timeSpent;
+      topicAnalysis[topic]!['questions'].add(data);
+
+      // Difficulty analysis
+      if (!difficultyAnalysis.containsKey(difficulty)) {
+        difficultyAnalysis[difficulty] = {
+          'total': 0,
+          'correct': 0,
+          'totalTime': 0,
+        };
+      }
+      difficultyAnalysis[difficulty]!['total'] += 1;
+      if (isCorrect) difficultyAnalysis[difficulty]!['correct'] += 1;
+      difficultyAnalysis[difficulty]!['totalTime'] += timeSpent;
+    }
+
+    // Calculate accuracies and average times
+    topicAnalysis.forEach((key, value) {
+      value['accuracy'] =
+          value['total'] > 0 ? (value['correct'] / value['total']) * 100 : 0;
+      value['averageTime'] =
+          value['total'] > 0 ? value['totalTime'] / value['total'] : 30;
+    });
+
+    difficultyAnalysis.forEach((key, value) {
+      value['accuracy'] =
+          value['total'] > 0 ? (value['correct'] / value['total']) * 100 : 0;
+      value['averageTime'] =
+          value['total'] > 0 ? value['totalTime'] / value['total'] : 30;
+    });
+
+    // Identify weak areas (accuracy < 70%) and slow areas (time > 40s)
+    List<String> weakTopics = topicAnalysis.entries
+        .where((entry) => entry.value['accuracy'] < 70)
+        .map((entry) => entry.key)
+        .toList();
+
+    List<String> slowTopics = topicAnalysis.entries
+        .where((entry) => entry.value['averageTime'] > 40)
+        .map((entry) => entry.key)
+        .toList();
+
+    List<String> strongTopics = topicAnalysis.entries
+        .where((entry) => entry.value['accuracy'] >= 85)
+        .map((entry) => entry.key)
+        .toList();
+
+    double overallAccuracy = _performanceData.isNotEmpty
+        ? (_performanceData.where((q) => q['isCorrect'] == true).length /
+                _performanceData.length) *
+            100
+        : 0;
+
+    return {
+      'analyzedQuestions': _performanceData,
+      'topicAnalysis': topicAnalysis,
+      'difficultyAnalysis': difficultyAnalysis,
+      'weakTopics': weakTopics,
+      'slowTopics': slowTopics,
+      'strongTopics': strongTopics,
+      'overallAccuracy': overallAccuracy,
+      'averageTime': _performanceData.isNotEmpty
+          ? _performanceData
+                  .map((q) => q['timeSpent'] ?? 30)
+                  .reduce((a, b) => a + b) /
+              _performanceData.length
+          : 30,
+    };
+  }
+
+  String _extractTopicFromQuestion(Map<String, dynamic> question) {
+    String questionText = question['question'] ?? '';
+    String lowerText = questionText.toLowerCase();
+
+    // Enhanced topic extraction based on programming language and content
+    if (widget.type == 'programming') {
+      if (lowerText.contains('variable') || lowerText.contains('declaration'))
+        return 'Variables';
+      if (lowerText.contains('function') || lowerText.contains('method'))
+        return 'Functions';
+      if (lowerText.contains('loop') ||
+          lowerText.contains('for') ||
+          lowerText.contains('while')) return 'Loops';
+      if (lowerText.contains('array') || lowerText.contains('list'))
+        return 'Arrays';
+      if (lowerText.contains('object') || lowerText.contains('class'))
+        return 'OOP';
+      if (lowerText.contains('condition') || lowerText.contains('if'))
+        return 'Conditionals';
+      if (lowerText.contains('exception') || lowerText.contains('error'))
+        return 'Error Handling';
+      if (lowerText.contains('string')) return 'Strings';
+      if (lowerText.contains('algorithm') || lowerText.contains('sort'))
+        return 'Algorithms';
+      if (lowerText.contains('data structure')) return 'Data Structures';
+    }
+
+    return widget.subtopicName;
+  }
+
   void _selectAnswer(String answer) {
-    if (_isSubmitted || _currentQuestion == null) return;
+    if (_isDisposed || !mounted || _isSubmitted || _currentQuestion == null)
+      return;
+
+    // Record answer time and performance data
+    _questionAnswerTimes[_currentQuestionIndex] =
+        DateTime.now().millisecondsSinceEpoch;
+
+    final questionStartTime = _questionStartTimes[_currentQuestionIndex] ??
+        DateTime.now().millisecondsSinceEpoch;
+    final timeSpent =
+        ((DateTime.now().millisecondsSinceEpoch - questionStartTime) / 1000)
+            .round();
+    final isCorrect = answer == _currentQuestion!['correct_answer'];
 
     setState(() {
       _selectedAnswers[_currentQuestionIndex] = answer;
     });
+
+    // Track performance for analytics only (no adaptive generation)
+    String topic = _extractTopicFromQuestion(_currentQuestion!);
+    String difficulty = _currentQuestion!['difficulty'] ?? 'Medium';
+
+    _performanceData.add({
+      'questionIndex': _currentQuestionIndex,
+      'topic': topic,
+      'difficulty': difficulty,
+      'isCorrect': isCorrect,
+      'timeSpent': timeSpent,
+      'selectedAnswer': answer,
+      'correctAnswer': _currentQuestion!['correct_answer'],
+      'timestamp': DateTime.now().toIso8601String(),
+      'question': _currentQuestion!['question'],
+    });
+
+    // Update progress in database with error handling
+    if (_sessionId != null) {
+      QuizStorageService.updateQuizProgress(
+        sessionId: _sessionId!,
+        questionIndex: _currentQuestionIndex,
+        selectedAnswer: answer,
+        isCorrect: isCorrect,
+        xpEarned: isCorrect ? 4 : 0,
+        timeSpent: _getTotalTimeSpent(),
+      ).catchError((e) {
+        print('Error updating quiz progress: $e');
+        // Continue anyway - don't block user experience
+      });
+    }
   }
 
   void _nextQuestion() {
-    if (_currentQuestionIndex < widget.questions.length - 1) {
-      setState(() {
-        _currentQuestionIndex++;
-      });
-      _slideController.reset();
-      _slideController.forward();
-    }
+    if (_isDisposed ||
+        !mounted ||
+        _currentQuestionIndex >= widget.questions.length - 1) return;
+
+    setState(() {
+      _currentQuestionIndex++;
+      _questionStartTimes[_currentQuestionIndex] =
+          DateTime.now().millisecondsSinceEpoch;
+    });
+    _slideController.reset();
+    _slideController.forward();
   }
 
   void _previousQuestion() {
-    if (_currentQuestionIndex > 0) {
-      setState(() {
-        _currentQuestionIndex--;
-      });
-      _slideController.reset();
-      _slideController.forward();
-    }
+    if (_isDisposed || !mounted || _currentQuestionIndex <= 0) return;
+
+    setState(() {
+      _currentQuestionIndex--;
+    });
+    _slideController.reset();
+    _slideController.forward();
   }
 
   void _goToQuestion(int index) {
-    if (index >= 0 && index < widget.questions.length) {
-      setState(() {
-        _currentQuestionIndex = index;
-      });
-      _slideController.reset();
-      _slideController.forward();
-      Navigator.pop(context);
-    }
+    if (_isDisposed ||
+        !mounted ||
+        index < 0 ||
+        index >= widget.questions.length) return;
+
+    setState(() {
+      _currentQuestionIndex = index;
+      if (!_questionStartTimes.containsKey(index)) {
+        _questionStartTimes[index] = DateTime.now().millisecondsSinceEpoch;
+      }
+    });
+    _slideController.reset();
+    _slideController.forward();
+    Navigator.pop(context);
   }
 
   void _showQuestionNavigator() {
+    if (_isDisposed || !mounted) return;
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -213,10 +439,10 @@ class _TestModeScreenState extends State<TestModeScreen>
                   itemBuilder: (context, index) {
                     final isAnswered = _selectedAnswers[index] != null;
                     final isCurrent = index == _currentQuestionIndex;
-                    
+
                     Color backgroundColor = Colors.grey.shade200;
                     Color textColor = Colors.grey.shade600;
-                    
+
                     if (isCurrent) {
                       backgroundColor = AppTheme.primaryColor;
                       textColor = Colors.white;
@@ -224,17 +450,19 @@ class _TestModeScreenState extends State<TestModeScreen>
                       backgroundColor = AppTheme.secondaryColor;
                       textColor = Colors.white;
                     }
-                    
+
                     return GestureDetector(
                       onTap: () => _goToQuestion(index),
                       child: Container(
                         decoration: BoxDecoration(
                           color: backgroundColor,
                           borderRadius: BorderRadius.circular(8.r),
-                          border: isCurrent ? Border.all(
-                            color: AppTheme.secondaryColor,
-                            width: 2,
-                          ) : null,
+                          border: isCurrent
+                              ? Border.all(
+                                  color: AppTheme.secondaryColor,
+                                  width: 2,
+                                )
+                              : null,
                         ),
                         child: Center(
                           child: Text(
@@ -259,11 +487,14 @@ class _TestModeScreenState extends State<TestModeScreen>
   }
 
   Future<void> _submitQuiz() async {
+    if (_isDisposed || !mounted) return;
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Submit Quiz?'),
-        content: Text('Are you sure you want to submit? You cannot change your answers after submission.'),
+        content: Text(
+            'Are you sure you want to submit? You cannot change your answers after submission.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -282,11 +513,15 @@ class _TestModeScreenState extends State<TestModeScreen>
   }
 
   void _autoSubmitQuiz() {
+    if (_isDisposed || !mounted) return;
+
     _quizTimer?.cancel();
     _processResults();
   }
 
   void _showErrorDialog(String message) {
+    if (_isDisposed || !mounted) return;
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -301,15 +536,19 @@ class _TestModeScreenState extends State<TestModeScreen>
         actions: [
           TextButton(
             onPressed: () {
-              Navigator.pop(context);
-              Navigator.pop(context);
+              if (mounted) {
+                Navigator.pop(context);
+                Navigator.pop(context);
+              }
             },
             child: Text('Go Back'),
           ),
           TextButton(
             onPressed: () {
-              Navigator.pop(context);
-              _retryQuiz();
+              if (mounted) {
+                Navigator.pop(context);
+                _retryQuiz();
+              }
             },
             child: Text('Retry'),
           ),
@@ -319,13 +558,15 @@ class _TestModeScreenState extends State<TestModeScreen>
   }
 
   Future<void> _retryQuiz() async {
+    if (_isDisposed || !mounted) return;
+
     setState(() {
       _isLoading = true;
     });
 
     await Future.delayed(Duration(seconds: 2));
-    
-    if (mounted) {
+
+    if (!_isDisposed && mounted) {
       setState(() {
         _currentQuestionIndex = 0;
         _selectedAnswers = List.filled(widget.questions.length, null);
@@ -335,8 +576,13 @@ class _TestModeScreenState extends State<TestModeScreen>
         _correctAnswers = 0;
         _totalXP = 0;
         _questionHistory = [];
+        _performanceData = [];
         _isLoading = false;
+        _questionStartTimes.clear();
+        _questionAnswerTimes.clear();
       });
+
+      _questionStartTimes[0] = DateTime.now().millisecondsSinceEpoch;
 
       _slideController.reset();
       _slideController.forward();
@@ -345,57 +591,108 @@ class _TestModeScreenState extends State<TestModeScreen>
   }
 
   Future<void> _processResults() async {
+    if (_isDisposed || !mounted) return;
+
     setState(() {
       _isSubmitted = true;
     });
 
+    // Calculate detailed question history with timing and performance data
     for (int i = 0; i < widget.questions.length; i++) {
       final question = widget.questions[i];
       final selectedAnswer = _selectedAnswers[i];
       final correctAnswer = question['correct_answer'];
       final isCorrect = selectedAnswer == correctAnswer;
-      
+
       if (isCorrect) {
         _correctAnswers++;
         _totalXP += 4;
       }
-      
+
+      // Calculate time spent on this specific question
+      int questionTime = 0;
+      if (_questionStartTimes.containsKey(i)) {
+        final startTime = _questionStartTimes[i]!;
+        final endTime =
+            _questionAnswerTimes[i] ?? DateTime.now().millisecondsSinceEpoch;
+        questionTime = ((endTime - startTime) / 1000).round();
+      }
+
+      String topic = _extractTopicFromQuestion(question);
+      String difficulty = question['difficulty'] ?? 'Medium';
+
       _questionHistory.add({
         'question': question,
         'selected_answer': selectedAnswer,
         'is_correct': isCorrect,
         'xp_earned': isCorrect ? 4 : 0,
+        'timestamp': DateTime.now().toIso8601String(),
+        'time_spent_on_question': questionTime,
+        'question_index': i,
+        'topic': topic,
+        'difficulty': difficulty,
+        'is_adaptive': false, // No adaptive questions anymore
       });
     }
 
     if (_totalXP > 0) {
-      await _updateUserXP(_totalXP);
+      _updateUserXP(_totalXP).catchError((e) {
+        print('Error updating XP: $e');
+        // Don't block user experience
+      });
     }
 
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (context) => QuizResultScreen(
-          mode: 'test',
-          topicName: widget.topicName,
-          subtopicName: widget.subtopicName,
+    // Store quiz completion in database
+    if (_sessionId != null) {
+      try {
+        await QuizStorageService.storeQuizCompletion(
+          sessionId: _sessionId!,
           totalQuestions: widget.questions.length,
           correctAnswers: _correctAnswers,
           totalXP: _totalXP,
+          timeSpent: _getTotalTimeSpent(),
           questionHistory: _questionHistory,
-          type: widget.type,
-          quizParams: widget.quizParams,
-          timeSpent: 1200 - _timeRemaining,
+          status: 'completed',
+        );
+
+        _sessionId = null;
+      } catch (e) {
+        print('Error storing quiz completion: $e');
+        // Continue to results anyway
+      }
+    }
+
+    if (!_isDisposed && mounted) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => QuizResultScreen(
+            mode: 'test',
+            topicName: widget.topicName,
+            subtopicName: widget.subtopicName,
+            totalQuestions: widget.questions.length,
+            correctAnswers: _correctAnswers,
+            totalXP: _totalXP,
+            questionHistory: _questionHistory,
+            type: widget.type,
+            quizParams: widget.quizParams,
+            timeSpent: 1200 - _timeRemaining,
+            performanceData:
+                _performanceData, // Keep performance data for analytics
+            adaptiveTriggered: false, // No adaptive questions triggered
+          ),
         ),
-      ),
-    );
+      );
+    }
   }
 
   Future<void> _updateUserXP(int xp) async {
+    if (_isDisposed || !mounted) return;
+
     try {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       final userData = await authProvider.getCurrentUserData();
-      
+
       if (userData != null) {
         final currentXP = userData['xp'] ?? 0;
         await authProvider.updateUserStats(xp: currentXP + xp);
@@ -405,16 +702,58 @@ class _TestModeScreenState extends State<TestModeScreen>
     }
   }
 
+  Future<void> _storeQuizAbandonment() async {
+    // Fire and forget - don't await in dispose to prevent blocking
+    if (_sessionId != null) {
+      final answeredCount =
+          _selectedAnswers.where((answer) => answer != null).length;
+      int correctCount = 0;
+      int xpEarned = 0;
+
+      for (int i = 0; i < widget.questions.length; i++) {
+        if (_selectedAnswers[i] != null) {
+          final isCorrect =
+              _selectedAnswers[i] == widget.questions[i]['correct_answer'];
+          if (isCorrect) {
+            correctCount++;
+            xpEarned += 4;
+          }
+        }
+      }
+
+      QuizStorageService.storeQuizAbandonment(
+        sessionId: _sessionId!,
+        questionsAnswered: answeredCount,
+        correctAnswers: correctCount,
+        xpEarned: xpEarned,
+        timeSpent: _getTotalTimeSpent(),
+        reason: 'user_exit',
+      ).catchError((e) {
+        print('Error storing quiz abandonment: $e');
+      });
+    }
+  }
+
+  int _getTotalTimeSpent() {
+    return ((DateTime.now().millisecondsSinceEpoch - _sessionStartTime) / 1000)
+        .round();
+  }
+
   String _formatTime(int seconds) {
     final minutes = seconds ~/ 60;
     final remainingSeconds = seconds % 60;
     return '${minutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}';
   }
 
-  int get _answeredCount => _selectedAnswers.where((answer) => answer != null).length;
+  int get _answeredCount =>
+      _selectedAnswers.where((answer) => answer != null).length;
 
   @override
   Widget build(BuildContext context) {
+    if (_isDisposed) {
+      return Container(); // Return empty container if disposed
+    }
+
     if (_isLoading || widget.questions.isEmpty || _currentQuestion == null) {
       return Scaffold(
         backgroundColor: AppTheme.primaryColor,
@@ -443,13 +782,31 @@ class _TestModeScreenState extends State<TestModeScreen>
                 ),
                 SizedBox(height: 24.h),
                 Text(
-                  'Loading quiz questions...',
+                  'Loading test questions...',
                   style: GoogleFonts.poppins(
                     color: Colors.white,
                     fontSize: 16.sp,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
+                if (_sessionId != null) ...[
+                  SizedBox(height: 12.h),
+                  Container(
+                    padding:
+                        EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(8.r),
+                    ),
+                    child: Text(
+                      'Session: ${_sessionId!.substring(0, 8)}...',
+                      style: GoogleFonts.poppins(
+                        color: Colors.white,
+                        fontSize: 10.sp,
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -459,13 +816,14 @@ class _TestModeScreenState extends State<TestModeScreen>
 
     return WillPopScope(
       onWillPop: () async {
-        if (_isSubmitted) return true;
-        
+        if (_isSubmitted || _isDisposed || !mounted) return true;
+
         final shouldExit = await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
             title: Text('Exit Quiz?'),
-            content: Text('Your progress will be lost. Are you sure you want to exit?'),
+            content: Text(
+                'Your progress will be lost. Are you sure you want to exit?'),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context, false),
@@ -478,7 +836,7 @@ class _TestModeScreenState extends State<TestModeScreen>
             ],
           ),
         );
-        
+
         return shouldExit ?? false;
       },
       child: Scaffold(
@@ -489,11 +847,14 @@ class _TestModeScreenState extends State<TestModeScreen>
           leading: IconButton(
             icon: Icon(Icons.close, color: Colors.white),
             onPressed: () async {
+              if (_isDisposed || !mounted) return;
+
               final shouldExit = await showDialog<bool>(
                 context: context,
                 builder: (context) => AlertDialog(
                   title: Text('Exit Quiz?'),
-                  content: Text('Your progress will be lost. Are you sure you want to exit?'),
+                  content: Text(
+                      'Your progress will be lost. Are you sure you want to exit?'),
                   actions: [
                     TextButton(
                       onPressed: () => Navigator.pop(context, false),
@@ -506,8 +867,8 @@ class _TestModeScreenState extends State<TestModeScreen>
                   ],
                 ),
               );
-              
-              if (shouldExit == true) {
+
+              if (shouldExit == true && mounted) {
                 Navigator.pop(context);
               }
             },
@@ -524,18 +885,23 @@ class _TestModeScreenState extends State<TestModeScreen>
               animation: _timerAnimation,
               builder: (context, child) {
                 return Container(
-                  padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+                  padding:
+                      EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
                   margin: EdgeInsets.only(right: 16.w),
                   decoration: BoxDecoration(
-                    color: _showTimeWarning ? Colors.red : AppTheme.secondaryColor,
+                    color:
+                        _showTimeWarning ? Colors.red : AppTheme.secondaryColor,
                     borderRadius: BorderRadius.circular(20.r),
-                    boxShadow: _showTimeWarning ? [
-                      BoxShadow(
-                        color: Colors.red.withOpacity(_timerAnimation.value * 0.5),
-                        blurRadius: 8,
-                        spreadRadius: 2,
-                      ),
-                    ] : null,
+                    boxShadow: _showTimeWarning
+                        ? [
+                            BoxShadow(
+                              color: Colors.red
+                                  .withOpacity(_timerAnimation.value * 0.5),
+                              blurRadius: 8,
+                              spreadRadius: 2,
+                            ),
+                          ]
+                        : null,
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -564,9 +930,11 @@ class _TestModeScreenState extends State<TestModeScreen>
         body: SafeArea(
           child: Column(
             children: [
+              // COMPACT HEADER SECTION
               Container(
                 width: double.infinity,
-                padding: EdgeInsets.all(16.w),
+                padding: EdgeInsets.symmetric(
+                    horizontal: 16.w, vertical: 12.h), // Reduced padding
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
@@ -579,6 +947,7 @@ class _TestModeScreenState extends State<TestModeScreen>
                 ),
                 child: Column(
                   children: [
+                    // Main row with topic info and navigation
                     Row(
                       children: [
                         Expanded(
@@ -589,31 +958,31 @@ class _TestModeScreenState extends State<TestModeScreen>
                                 widget.topicName,
                                 style: GoogleFonts.poppins(
                                   color: AppTheme.secondaryColor,
-                                  fontSize: 16.sp,
+                                  fontSize: 14.sp,
                                   fontWeight: FontWeight.bold,
                                 ),
-                                maxLines: 2,
+                                maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
                               Text(
-                                widget.subtopicName,
+                                'Question ${_currentQuestionIndex + 1}/${widget.questions.length} • ${_answeredCount} answered',
                                 style: GoogleFonts.poppins(
                                   color: Colors.white70,
-                                  fontSize: 12.sp,
+                                  fontSize: 11.sp,
                                 ),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
                               ),
                             ],
                           ),
                         ),
+                        // Question navigator button
                         GestureDetector(
                           onTap: _showQuestionNavigator,
                           child: Container(
-                            padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
+                            padding: EdgeInsets.symmetric(
+                                horizontal: 10.w, vertical: 6.h),
                             decoration: BoxDecoration(
                               color: Colors.white.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(20.r),
+                              borderRadius: BorderRadius.circular(16.r),
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
@@ -621,14 +990,14 @@ class _TestModeScreenState extends State<TestModeScreen>
                                 Icon(
                                   Icons.grid_view,
                                   color: Colors.white,
-                                  size: 16.sp,
+                                  size: 14.sp,
                                 ),
                                 SizedBox(width: 4.w),
                                 Text(
                                   '${_answeredCount}/${widget.questions.length}',
                                   style: GoogleFonts.poppins(
                                     color: Colors.white,
-                                    fontSize: 12.sp,
+                                    fontSize: 11.sp,
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
@@ -638,30 +1007,58 @@ class _TestModeScreenState extends State<TestModeScreen>
                         ),
                       ],
                     ),
-                    
-                    SizedBox(height: 10.h),
-                    
+
+                    SizedBox(height: 8.h),
+
+                    // Progress bar row
                     Row(
                       children: [
                         Expanded(
                           child: LinearProgressIndicator(
-                            value: (_currentQuestionIndex + 1) / widget.questions.length,
+                            value: (_currentQuestionIndex + 1) /
+                                widget.questions.length,
                             backgroundColor: Colors.white.withOpacity(0.3),
-                            valueColor: AlwaysStoppedAnimation<Color>(AppTheme.secondaryColor),
-                            minHeight: 8.h,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                                AppTheme.secondaryColor),
+                            minHeight: 6.h,
                           ),
                         ),
-                        SizedBox(width: 12.w),
+                        SizedBox(width: 8.w),
                         Text(
-                          '${_currentQuestionIndex + 1}/${widget.questions.length}',
+                          '${(((_currentQuestionIndex + 1) / widget.questions.length) * 100).toInt()}%',
                           style: GoogleFonts.poppins(
                             color: Colors.white,
-                            fontSize: 14.sp,
+                            fontSize: 12.sp,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
                       ],
                     ),
+
+                    // Session tracking (if exists)
+                    if (_sessionId != null) ...[
+                      SizedBox(height: 6.h),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          Container(
+                            padding: EdgeInsets.symmetric(
+                                horizontal: 6.w, vertical: 2.h),
+                            decoration: BoxDecoration(
+                              color: Colors.green.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(8.r),
+                            ),
+                            child: Text(
+                              'Tracked',
+                              style: GoogleFonts.poppins(
+                                color: Colors.white,
+                                fontSize: 9.sp,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -693,9 +1090,11 @@ class _TestModeScreenState extends State<TestModeScreen>
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Container(
-                                padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 4.h),
+                                padding: EdgeInsets.symmetric(
+                                    horizontal: 10.w, vertical: 4.h),
                                 decoration: BoxDecoration(
-                                  color: _getDifficultyColor(_currentQuestion!['difficulty']),
+                                  color: _getDifficultyColor(
+                                      _currentQuestion!['difficulty']),
                                   borderRadius: BorderRadius.circular(20.r),
                                 ),
                                 child: Text(
@@ -709,12 +1108,15 @@ class _TestModeScreenState extends State<TestModeScreen>
                               ),
                               IconButton(
                                 onPressed: () {
+                                  if (_isDisposed || !mounted) return;
+
                                   showDialog(
                                     context: context,
                                     builder: (context) => AlertDialog(
                                       title: Row(
                                         children: [
-                                          Icon(Icons.lightbulb, color: Colors.amber),
+                                          Icon(Icons.lightbulb,
+                                              color: Colors.amber),
                                           SizedBox(width: 8.w),
                                           Text('Hint'),
                                         ],
@@ -722,18 +1124,24 @@ class _TestModeScreenState extends State<TestModeScreen>
                                       content: Container(
                                         constraints: BoxConstraints(
                                           maxHeight: 300.h,
-                                          maxWidth: MediaQuery.of(context).size.width * 0.8,
+                                          maxWidth: MediaQuery.of(context)
+                                                  .size
+                                                  .width *
+                                              0.8,
                                         ),
                                         child: SingleChildScrollView(
                                           child: Text(
-                                            _currentQuestion!['hint'] ?? 'No hint available',
-                                            style: GoogleFonts.poppins(fontSize: 14.sp),
+                                            _currentQuestion!['hint'] ??
+                                                'No hint available',
+                                            style: GoogleFonts.poppins(
+                                                fontSize: 14.sp),
                                           ),
                                         ),
                                       ),
                                       actions: [
                                         TextButton(
-                                          onPressed: () => Navigator.pop(context),
+                                          onPressed: () =>
+                                              Navigator.pop(context),
                                           child: Text('Got it!'),
                                         ),
                                       ],
@@ -748,9 +1156,7 @@ class _TestModeScreenState extends State<TestModeScreen>
                               ),
                             ],
                           ),
-                          
                           SizedBox(height: 16.h),
-                          
                           Text(
                             _currentQuestion!['question'] ?? '',
                             style: GoogleFonts.poppins(
@@ -761,21 +1167,24 @@ class _TestModeScreenState extends State<TestModeScreen>
                             ),
                             softWrap: true,
                           ),
-                          
                           SizedBox(height: 20.h),
-                          
                           Column(
                             children: List.generate(
-                              (_currentQuestion!['options'] as List?)?.length ?? 0,
+                              (_currentQuestion!['options'] as List?)?.length ??
+                                  0,
                               (index) {
-                                final option = _currentQuestion!['options'][index];
-                                final isSelected = _selectedAnswers[_currentQuestionIndex] == option;
-                                
+                                final option =
+                                    _currentQuestion!['options'][index];
+                                final isSelected =
+                                    _selectedAnswers[_currentQuestionIndex] ==
+                                        option;
+
                                 return Container(
                                   margin: EdgeInsets.only(bottom: 10.h),
                                   child: Material(
                                     color: isSelected
-                                        ? AppTheme.secondaryColor.withOpacity(0.1)
+                                        ? AppTheme.secondaryColor
+                                            .withOpacity(0.1)
                                         : Colors.grey.shade50,
                                     borderRadius: BorderRadius.circular(12.r),
                                     child: InkWell(
@@ -791,10 +1200,12 @@ class _TestModeScreenState extends State<TestModeScreen>
                                                 : Colors.grey.shade300,
                                             width: 2,
                                           ),
-                                          borderRadius: BorderRadius.circular(12.r),
+                                          borderRadius:
+                                              BorderRadius.circular(12.r),
                                         ),
                                         child: Row(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
                                           children: [
                                             Container(
                                               width: 22.w,
@@ -835,7 +1246,7 @@ class _TestModeScreenState extends State<TestModeScreen>
                                                 ),
                                                 softWrap: true,
                                               ),
-                                              ),
+                                            ),
                                           ],
                                         ),
                                       ),
@@ -851,7 +1262,7 @@ class _TestModeScreenState extends State<TestModeScreen>
                   ),
                 ),
               ),
-              
+
               Container(
                 padding: EdgeInsets.all(18.w),
                 decoration: BoxDecoration(
@@ -869,7 +1280,11 @@ class _TestModeScreenState extends State<TestModeScreen>
                     if (_currentQuestionIndex > 0)
                       Expanded(
                         child: OutlinedButton(
-                          onPressed: _previousQuestion,
+                          onPressed: () {
+                            if (!_isDisposed && mounted) {
+                              _previousQuestion();
+                            }
+                          },
                           style: OutlinedButton.styleFrom(
                             padding: EdgeInsets.symmetric(vertical: 14.h),
                             side: BorderSide(color: AppTheme.primaryColor),
@@ -887,17 +1302,23 @@ class _TestModeScreenState extends State<TestModeScreen>
                           ),
                         ),
                       ),
-                    
                     if (_currentQuestionIndex > 0) SizedBox(width: 16.w),
-                    
                     Expanded(
                       flex: _currentQuestionIndex == 0 ? 1 : 1,
                       child: ElevatedButton(
-                        onPressed: _currentQuestionIndex == widget.questions.length - 1
-                            ? _submitQuiz
-                            : _nextQuestion,
+                        onPressed: () {
+                          if (_isDisposed || !mounted) return;
+
+                          if (_currentQuestionIndex ==
+                              widget.questions.length - 1) {
+                            _submitQuiz();
+                          } else {
+                            _nextQuestion();
+                          }
+                        },
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: _currentQuestionIndex == widget.questions.length - 1
+                          backgroundColor: _currentQuestionIndex ==
+                                  widget.questions.length - 1
                               ? Colors.green
                               : AppTheme.secondaryColor,
                           padding: EdgeInsets.symmetric(vertical: 14.h),

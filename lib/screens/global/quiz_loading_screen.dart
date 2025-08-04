@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'dart:async';
 import 'dart:math';
 import '../../services/quiz_service.dart';
+import '../../services/quiz_storage_service.dart'; // Add this import
 import '../../theme/default_theme.dart';
 import 'practice_mode_screen.dart';
 import 'test_mode_screen.dart';
@@ -42,15 +43,17 @@ class _QuizLoadingScreenState extends State<QuizLoadingScreen>
   bool _hasError = false;
   String _errorMessage = '';
   int _currentStep = 0;
-  
+  String? _sessionId; // Add session ID tracking
+
   final List<String> _practiceLoadingMessages = [
     'Initializing AI...',
     'Analyzing topic content...',
     'Generating 10 practice questions...',
     'Optimizing difficulty levels...',
     'Preparing interactive session...',
+    'Setting up quiz tracking...',
   ];
-  
+
   final List<String> _testLoadingMessages = [
     'Initializing AI...',
     'Analyzing topic content...',
@@ -58,6 +61,7 @@ class _QuizLoadingScreenState extends State<QuizLoadingScreen>
     'Generating second set (10 questions)...',
     'Optimizing question difficulty...',
     'Finalizing 20-question test...',
+    'Setting up quiz tracking...',
   ];
 
   @override
@@ -69,7 +73,8 @@ class _QuizLoadingScreenState extends State<QuizLoadingScreen>
 
   void _initializeAnimations() {
     _progressController = AnimationController(
-      duration: const Duration(seconds: 20),
+      duration:
+          const Duration(seconds: 22), // Slightly longer to account for storage
       vsync: this,
     );
 
@@ -107,15 +112,16 @@ class _QuizLoadingScreenState extends State<QuizLoadingScreen>
     _progressController.forward();
 
     // Step through loading messages with different timing for test vs practice
-    final stepDuration = widget.mode == 'test' 
-        ? const Duration(seconds: 3) // Longer steps for test mode (6 steps)
-        : const Duration(seconds: 4); // Standard steps for practice mode (5 steps)
-    
+    final stepDuration = widget.mode == 'test'
+        ? const Duration(seconds: 3) // Longer steps for test mode (7 steps)
+        : const Duration(
+            seconds: 3); // Standard steps for practice mode (6 steps)
+
     _loadingTimer = Timer.periodic(stepDuration, (timer) {
-      final maxSteps = widget.mode == 'test' 
+      final maxSteps = widget.mode == 'test'
           ? _testLoadingMessages.length - 1
           : _practiceLoadingMessages.length - 1;
-          
+
       if (mounted && _currentStep < maxSteps) {
         setState(() {
           _currentStep++;
@@ -148,16 +154,18 @@ class _QuizLoadingScreenState extends State<QuizLoadingScreen>
           type: widget.type,
           params: widget.quizParams,
         );
-        
-        print('QUIZ_LOADING: Generated ${questions.length} questions for practice mode');
+
+        print(
+            'QUIZ_LOADING: Generated ${questions.length} questions for practice mode');
       } else {
         // For test mode, generate 20 questions (2 sets of 10)
         questions = await QuizService.generateTestQuestions(
           type: widget.type,
           params: widget.quizParams,
         );
-        
-        print('QUIZ_LOADING: Generated ${questions.length} questions for test mode');
+
+        print(
+            'QUIZ_LOADING: Generated ${questions.length} questions for test mode');
       }
 
       // Validate questions
@@ -168,15 +176,35 @@ class _QuizLoadingScreenState extends State<QuizLoadingScreen>
       }
 
       // Ensure minimum questions count
-      final minQuestions = widget.mode == 'practice' ? 5 : 15; // Allow some buffer
+      final minQuestions =
+          widget.mode == 'practice' ? 5 : 15; // Allow some buffer
       if (questions.length < minQuestions) {
-        throw Exception('Insufficient questions generated: ${questions.length}/$minQuestions');
+        throw Exception(
+            'Insufficient questions generated: ${questions.length}/$minQuestions');
       }
 
-      // Wait for minimum loading time (20 seconds)
-      final elapsed = _progressController.value * 20;
-      if (elapsed < 20) {
-        await Future.delayed(Duration(seconds: (20 - elapsed).round()));
+      // Store quiz session in Realtime Database
+      print('QUIZ_LOADING: Storing quiz session in database...');
+      _sessionId = await QuizStorageService.storeQuizStart(
+        mode: widget.mode,
+        type: widget.type,
+        topicName: widget.topicName,
+        subtopicName: widget.subtopicName,
+        quizParams: widget.quizParams,
+        questions: questions,
+      );
+
+      if (_sessionId == null) {
+        print(
+            'QUIZ_LOADING: Warning - Failed to store quiz session, but continuing...');
+      } else {
+        print('QUIZ_LOADING: Quiz session stored with ID: $_sessionId');
+      }
+
+      // Wait for minimum loading time (22 seconds)
+      final elapsed = _progressController.value * 22;
+      if (elapsed < 22) {
+        await Future.delayed(Duration(seconds: (22 - elapsed).round()));
       }
 
       if (mounted) {
@@ -190,6 +218,7 @@ class _QuizLoadingScreenState extends State<QuizLoadingScreen>
                 topicName: widget.topicName,
                 subtopicName: widget.subtopicName,
                 initialQuestions: questions, // Initial 10 questions
+                sessionId: _sessionId, // Pass session ID
               ),
             ),
           );
@@ -203,6 +232,7 @@ class _QuizLoadingScreenState extends State<QuizLoadingScreen>
                 topicName: widget.topicName,
                 subtopicName: widget.subtopicName,
                 questions: questions, // All 20 questions
+                sessionId: _sessionId, // Pass session ID
               ),
             ),
           );
@@ -224,6 +254,7 @@ class _QuizLoadingScreenState extends State<QuizLoadingScreen>
     setState(() {
       _hasError = false;
       _currentStep = 0;
+      _sessionId = null; // Reset session ID
     });
     _progressController.reset();
     _progressController.forward();
@@ -232,10 +263,9 @@ class _QuizLoadingScreenState extends State<QuizLoadingScreen>
 
   @override
   Widget build(BuildContext context) {
-    final currentMessages = widget.mode == 'test' 
-        ? _testLoadingMessages 
-        : _practiceLoadingMessages;
-        
+    final currentMessages =
+        widget.mode == 'test' ? _testLoadingMessages : _practiceLoadingMessages;
+
     return Scaffold(
       backgroundColor: AppTheme.primaryColor,
       body: SafeArea(
@@ -336,7 +366,9 @@ class _QuizLoadingScreenState extends State<QuizLoadingScreen>
                   child: Column(
                     children: [
                       Text(
-                        widget.mode == 'practice' ? 'Practice Mode' : 'Test Mode',
+                        widget.mode == 'practice'
+                            ? 'Practice Mode'
+                            : 'Test Mode',
                         style: GoogleFonts.poppins(
                           fontSize: 20.sp,
                           fontWeight: FontWeight.bold,
@@ -365,13 +397,14 @@ class _QuizLoadingScreenState extends State<QuizLoadingScreen>
                       SizedBox(height: 12.h),
                       // Mode-specific info
                       Container(
-                        padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+                        padding: EdgeInsets.symmetric(
+                            horizontal: 16.w, vertical: 8.h),
                         decoration: BoxDecoration(
                           color: AppTheme.secondaryColor.withOpacity(0.2),
                           borderRadius: BorderRadius.circular(12.r),
                         ),
                         child: Text(
-                          widget.mode == 'practice' 
+                          widget.mode == 'practice'
                               ? 'Generating 10 questions per batch'
                               : 'Generating 20 questions total',
                           style: GoogleFonts.poppins(
@@ -495,6 +528,24 @@ class _QuizLoadingScreenState extends State<QuizLoadingScreen>
                             ),
                             textAlign: TextAlign.center,
                           ),
+                          if (_sessionId != null) ...[
+                            SizedBox(height: 12.h),
+                            Container(
+                              padding: EdgeInsets.symmetric(
+                                  horizontal: 12.w, vertical: 6.h),
+                              decoration: BoxDecoration(
+                                color: Colors.green.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(8.r),
+                              ),
+                              child: Text(
+                                'Quiz session created',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 12.sp,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ],
                         ],
                       );
                     },

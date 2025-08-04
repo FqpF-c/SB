@@ -1,1 +1,40 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"quip-664c9","appId":"1:331394964996:android:9be5f8582979cc2cbe5f51","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"quip-664c9","configurations":{"android":"1:331394964996:android:9be5f8582979cc2cbe5f51","ios":"1:331394964996:ios:12c076067e988023be5f51","web":"1:331394964996:web:4492900dfc8d9433be5f51"}}}}}}
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "quip-664c9",
+          "appId": "1:331394964996:android:9be5f8582979cc2cbe5f51",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "quip-664c9",
+          "configurations": {
+            "android": "1:331394964996:android:9be5f8582979cc2cbe5f51",
+            "ios": "1:331394964996:ios:12c076067e988023be5f51",
+            "web": "1:331394964996:web:4492900dfc8d9433be5f51"
+          }
+        }
+      }
+    }
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ],
+      "runtime": "python313",
+      "predeploy": [
+        "npm --prefix \"$RESOURCE_DIR\" run lint"
+      ]
+    }
+  ]
+}
