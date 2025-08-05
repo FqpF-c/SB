@@ -1,0 +1,28 @@
+{
+  "rules": {
+    "skillbench": {
+      "users": {
+        "$phoneNumber": {
+          ".read": "auth != null",
+          ".write": "auth != null"
+        }
+      },
+      "quiz_sessions": {
+        "$phoneNumber": {
+          "$sessionId": {
+            ".read": "auth != null",
+            ".write": "auth != null"
+          }
+        }
+      },
+      "progress": {
+        "$uid": {
+          "$subjectId": {
+            ".read": "auth != null",
+            ".write": "auth != null"
+          }
+        }
+      }
+    }
+  }
+} 

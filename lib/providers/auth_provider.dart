@@ -9,6 +9,7 @@ import '../services/notification_service.dart';
 class AuthProvider with ChangeNotifier {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseDatabase _database = FirebaseDatabase.instance;
 
   User? get currentUser => _auth.currentUser;
   Stream<User?> get authStateChanges => _auth.authStateChanges();
@@ -26,7 +27,7 @@ class AuthProvider with ChangeNotifier {
     try {
       final docSnapshot = await _firestore
           .collection('skillbench')
-          .doc('ALL_USERS')
+          .doc('users')
           .collection('users')
           .doc(phoneNumber)
           .get();
@@ -69,30 +70,26 @@ class AuthProvider with ChangeNotifier {
 
   Future<void> checkStreakStatusAndNotify() async {
     try {
-      final phoneNumber = await getCurrentUserPhone();
-      if (phoneNumber == null) return;
+      final user = _auth.currentUser;
+      if (user == null) return;
 
-      final docSnapshot = await _firestore
-          .collection('skillbench')
-          .doc('ALL_USERS')
-          .collection('users')
-          .doc(phoneNumber)
-          .get();
+      final snapshot =
+          await _database.ref('skillbench/users/${user.uid}').get();
 
-      if (!docSnapshot.exists) return;
+      if (!snapshot.exists) return;
 
-      final data = docSnapshot.data();
+      final data = snapshot.value as Map<String, dynamic>?;
       final lastUsageDate = data?['last_usage_date'];
       final streaks = data?['streaks'] ?? 0;
 
       final now = DateTime.now();
       final todayStr = DateFormat('yyyy-MM-dd').format(now);
-      final yesterdayStr = DateFormat('yyyy-MM-dd').format(now.subtract(Duration(days: 1)));
+      final yesterdayStr =
+          DateFormat('yyyy-MM-dd').format(now.subtract(Duration(days: 1)));
 
       if (lastUsageDate == yesterdayStr) {
         await NotificationService.sendStreakReminderNotification(streaks + 1);
       }
-
     } catch (e) {
       print('Error checking streak status: $e');
     }
@@ -111,9 +108,10 @@ class AuthProvider with ChangeNotifier {
 
       final exists = await checkIfUserExists(phoneNumber);
       if (exists) {
+        // Update last_login in Firestore
         await _firestore
             .collection('skillbench')
-            .doc('ALL_USERS')
+            .doc('users')
             .collection('users')
             .doc(phoneNumber)
             .update({
@@ -143,53 +141,75 @@ class AuthProvider with ChangeNotifier {
       final batch = userData['batch'];
       final firebaseUID = user!.uid;
 
-      await _firestore.runTransaction((transaction) async {
-        final mainUserRef = _firestore
+      // Handle "no organization" case
+      final organizationData = {
+        'college': college ?? 'no_organization',
+        'department': department ?? 'no_organization',
+        'batch': batch ?? 'no_organization',
+        'email': userData['email'] ?? 'no_organization',
+      };
+
+      // Prepare Firestore data (full user profile without stats)
+      final firestoreUserData = {
+        ...userData,
+        ...organizationData,
+        'phone_number': phoneNumber,
+        'username': userData['username'] ?? 'User',
+        'current_firebase_uid': firebaseUID,
+        'created_at': Timestamp.now(),
+        'last_login': Timestamp.now(),
+        'gender': userData['gender'] ?? 'prefer_not_to_say',
+        'profile_pic_type': userData['profile_pic_type'] ?? 0,
+        'selectedProfileImage': userData['selectedProfileImage'] ?? 1,
+        'profilePicUrl': userData['profilePicUrl'] ?? null,
+        'total_request': userData['total_request'] ??
+            {
+              'practice_mode': 0,
+              'test_mode': 0,
+            },
+        'daily_usage': userData['daily_usage'] ?? 0,
+        'total_usage': userData['total_usage'] ?? 0,
+      };
+
+      // Prepare Realtime Database data (only stats)
+      final rtdbUserData = {
+        'xp': userData['xp'] ?? 20,
+        'coins': userData['coins'] ?? 5,
+        'streaks': userData['streaks'] ?? 0,
+        'study_hours': userData['study_hours'] ?? 0,
+        'last_usage_date': DateFormat('yyyy-MM-dd').format(DateTime.now()),
+      };
+
+      // Store full user data in Firestore
+      try {
+        print('🔄 Storing user data in Firestore...');
+        print('📱 Phone Number: $phoneNumber');
+        print('🔑 Firebase UID: $firebaseUID');
+
+        await _firestore
             .collection('skillbench')
-            .doc('ALL_USERS')
+            .doc('users')
             .collection('users')
-            .doc(phoneNumber);
+            .doc(phoneNumber)
+            .set(firestoreUserData);
+        print('✅ User data stored in Firestore successfully');
+      } catch (e) {
+        print('⚠️ Error storing user data in Firestore: $e');
+        throw e;
+      }
 
-        final userSnapshot = await transaction.get(mainUserRef);
-        final existingData = userSnapshot.exists ? userSnapshot.data() : null;
+      // Store stats in Realtime Database using user_id
+      try {
+        print('🔄 Storing user stats in Realtime Database...');
+        print('📊 Stats to store: ${rtdbUserData.keys.toList()}');
 
-        final completeUserData = {
-          ...userData,
-          'phone_number': phoneNumber,
-          'username': userData['username'] ?? (existingData?['username'] ?? 'User'),
-          'current_firebase_uid': firebaseUID,
-          'created_at':
-              userSnapshot.exists ? (existingData?['created_at'] ?? Timestamp.now()) : Timestamp.now(),
-          'last_login': Timestamp.now(),
-          'streaks': userData['streaks'] ?? (existingData?['streaks'] ?? 0),
-          'coins': userData['coins'] ?? (existingData?['coins'] ?? 5),
-          'xp': userData['xp'] ?? (existingData?['xp'] ?? 20),
-          'daily_usage': userData['daily_usage'] ?? (existingData?['daily_usage'] ?? 0),
-          'total_usage': userData['total_usage'] ?? (existingData?['total_usage'] ?? 0),
-          'gender': userData['gender'] ?? (existingData?['gender'] ?? 'prefer_not_to_say'),
-          'total_request': userData['total_request'] ?? (existingData?['total_request'] ?? {
-            'practice_mode': 0,
-            'test_mode': 0,
-          }),
-        };
-
-        transaction.set(mainUserRef, completeUserData, SetOptions(merge: true));
-
-        final collegeUserRef = _firestore
-            .collection('skillbench')
-            .doc(college)
-            .collection(department)
-            .doc(batch)
-            .collection('users')
-            .doc(phoneNumber);
-
-        transaction.set(collegeUserRef, {
-          'phone_number': phoneNumber,
-          'username': userData['username'],
-          'current_firebase_uid': firebaseUID,
-          'reference': mainUserRef,
-        }, SetOptions(merge: true));
-      });
+        await _database.ref('skillbench/users/$firebaseUID').set(rtdbUserData);
+        print('✅ User stats stored in Realtime Database successfully');
+      } catch (e) {
+        print('⚠️ Error storing user stats: $e');
+        print('🔍 Error details: ${e.toString()}');
+        throw e;
+      }
 
       await setLoggedIn(phoneNumber);
     } catch (e) {
@@ -217,7 +237,7 @@ class AuthProvider with ChangeNotifier {
 
       final docSnapshot = await _firestore
           .collection('skillbench')
-          .doc('ALL_USERS')
+          .doc('users')
           .collection('users')
           .doc(phoneNumber)
           .get();
@@ -225,8 +245,11 @@ class AuthProvider with ChangeNotifier {
       if (docSnapshot.exists) {
         final data = docSnapshot.data();
         final currentUser = _auth.currentUser;
-        if (currentUser != null && data != null && data['current_firebase_uid'] != currentUser.uid) {
-          await docSnapshot.reference.update({'current_firebase_uid': currentUser.uid});
+        if (currentUser != null &&
+            data != null &&
+            data['current_firebase_uid'] != currentUser.uid) {
+          await docSnapshot.reference
+              .update({'current_firebase_uid': currentUser.uid});
           data['current_firebase_uid'] = currentUser.uid;
         }
         return data;
@@ -239,29 +262,21 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  Future<void> updateUserStats({int? streaks, int? coins, int? xp}) async {
+  Future<void> updateUserStats(
+      {int? streaks, int? coins, int? xp, int? studyHours}) async {
     try {
-      final phoneNumber = await getCurrentUserPhone();
-      if (phoneNumber == null) throw Exception('User not authenticated');
+      final user = _auth.currentUser;
+      if (user == null) throw Exception('User not authenticated');
 
       final updateData = <String, dynamic>{};
       if (streaks != null) updateData['streaks'] = streaks;
       if (coins != null) updateData['coins'] = coins;
       if (xp != null) updateData['xp'] = xp;
+      if (studyHours != null) updateData['study_hours'] = studyHours;
 
       if (updateData.isEmpty) return;
 
-      await _firestore
-          .collection('skillbench')
-          .doc('ALL_USERS')
-          .collection('users')
-          .doc(phoneNumber)
-          .update(updateData);
-
-      // Optional: sync to Realtime Database
-      await FirebaseDatabase.instance
-          .ref('skillbench/users/$phoneNumber')
-          .update(updateData);
+      await _database.ref('skillbench/users/${user.uid}').update(updateData);
 
       notifyListeners();
     } catch (e) {
@@ -272,37 +287,59 @@ class AuthProvider with ChangeNotifier {
 
   Future<void> updateDailyUsage(int minutes) async {
     try {
-      final phoneNumber = await getCurrentUserPhone();
-      if (phoneNumber == null) throw Exception('User not authenticated');
+      final user = _auth.currentUser;
+      if (user == null) throw Exception('User not authenticated');
 
       final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
 
-      final docSnapshot = await _firestore
-          .collection('skillbench')
-          .doc('ALL_USERS')
-          .collection('users')
-          .doc(phoneNumber)
-          .get();
+      // Update usage in Firestore (full user data)
+      final phoneNumber = await getCurrentUserPhone();
+      if (phoneNumber != null) {
+        final docSnapshot = await _firestore
+            .collection('skillbench')
+            .doc('users')
+            .collection('users')
+            .doc(phoneNumber)
+            .get();
 
-      int currentUsage = 0;
-      int totalUsage = 0;
+        int currentUsage = 0;
+        int totalUsage = 0;
 
-      if (docSnapshot.exists) {
-        final data = docSnapshot.data();
+        if (docSnapshot.exists) {
+          final data = docSnapshot.data();
+          if (data != null) {
+            currentUsage = data['daily_usage'] ?? 0;
+            totalUsage = data['total_usage'] ?? 0;
+          }
+        }
+
+        await _firestore
+            .collection('skillbench')
+            .doc('users')
+            .collection('users')
+            .doc(phoneNumber)
+            .update({
+          'daily_usage': currentUsage + minutes,
+          'total_usage': totalUsage + minutes,
+          'last_usage_date': today,
+        });
+      }
+
+      // Update study hours in Realtime Database
+      final snapshot =
+          await _database.ref('skillbench/users/${user.uid}').get();
+      int currentStudyHours = 0;
+
+      if (snapshot.exists) {
+        final data = snapshot.value as Map<String, dynamic>?;
         if (data != null) {
-          currentUsage = data['daily_usage'] ?? 0;
-          totalUsage = data['total_usage'] ?? 0;
+          currentStudyHours = data['study_hours'] ?? 0;
         }
       }
 
-      await _firestore
-          .collection('skillbench')
-          .doc('ALL_USERS')
-          .collection('users')
-          .doc(phoneNumber)
-          .update({
-        'daily_usage': currentUsage + minutes,
-        'total_usage': totalUsage + minutes,
+      await _database.ref('skillbench/users/${user.uid}').update({
+        'study_hours':
+            currentStudyHours + (minutes / 60), // Convert minutes to hours
         'last_usage_date': today,
       });
 
@@ -320,7 +357,7 @@ class AuthProvider with ChangeNotifier {
 
       final docSnapshot = await _firestore
           .collection('skillbench')
-          .doc('ALL_USERS')
+          .doc('users')
           .collection('users')
           .doc(phoneNumber)
           .get();
@@ -342,7 +379,7 @@ class AuthProvider with ChangeNotifier {
 
       await _firestore
           .collection('skillbench')
-          .doc('ALL_USERS')
+          .doc('users')
           .collection('users')
           .doc(phoneNumber)
           .update({
@@ -361,5 +398,82 @@ class AuthProvider with ChangeNotifier {
 
   Future<String?> getCurrentUserUID() async {
     return await getCurrentUserPhone(); // phone number used as identifier
+  }
+
+  // Get user stats from Realtime Database
+  Future<Map<String, dynamic>?> getUserStats() async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) return null;
+
+      final snapshot =
+          await _database.ref('skillbench/users/${user.uid}').get();
+
+      if (snapshot.exists) {
+        return snapshot.value as Map<String, dynamic>?;
+      }
+
+      return null;
+    } catch (e) {
+      print('Error getting user stats: $e');
+      return null;
+    }
+  }
+
+  // Update progress in Realtime Database
+  Future<void> updateProgress(
+      String subjectId, Map<String, dynamic> progressData) async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) throw Exception('User not authenticated');
+
+      await _database
+          .ref('skillbench/progress/${user.uid}/$subjectId')
+          .set(progressData);
+    } catch (e) {
+      print('Error updating progress: $e');
+      throw e;
+    }
+  }
+
+  // Get progress from Realtime Database
+  Future<Map<String, dynamic>?> getProgress(String subjectId) async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) return null;
+
+      final snapshot = await _database
+          .ref('skillbench/progress/${user.uid}/$subjectId')
+          .get();
+
+      if (snapshot.exists) {
+        return snapshot.value as Map<String, dynamic>?;
+      }
+
+      return null;
+    } catch (e) {
+      print('Error getting progress: $e');
+      return null;
+    }
+  }
+
+  // Get all progress for current user
+  Future<Map<String, dynamic>> getAllProgress() async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) return {};
+
+      final snapshot =
+          await _database.ref('skillbench/progress/${user.uid}').get();
+
+      if (snapshot.exists) {
+        return snapshot.value as Map<String, dynamic>? ?? {};
+      }
+
+      return {};
+    } catch (e) {
+      print('Error getting all progress: $e');
+      return {};
+    }
   }
 }
