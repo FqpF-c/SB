@@ -82,15 +82,24 @@ class _LeadScreenState extends State<LeadScreen> with TickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        backgroundColor: const Color(0xFFdf678c),
+        elevation: 0,
+        toolbarHeight: 0, // Hide the toolbar but keep the status bar styling
+        systemOverlayStyle: const SystemUiOverlayStyle(
+          statusBarColor: Color(0xFFdf678c), // Set status bar color to #df678c
+          statusBarIconBrightness: Brightness.light, // White icons on colored background
+        ),
+      ),
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              AppTheme.primaryColor,
-              AppTheme.primaryColor.withOpacity(0.8),
-              const Color(0xFF2A1045),
+              AppTheme.secondaryColor,
+              AppTheme.secondaryColor.withOpacity(0.8),
+              AppTheme.secondaryColor.withOpacity(0.6),
             ],
           ),
         ),

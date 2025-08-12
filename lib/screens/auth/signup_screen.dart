@@ -28,7 +28,7 @@ class _SignupScreenState extends State<SignupScreen> {
   String? _selectedDepartment;
   String? _selectedBatch;
   String? _selectedGender;
-  int _selectedProfilePic = -1; // Default no selection
+  int _selectedProfilePic = -1;
 
   List<String> _collegesList = [];
   List<String> _departmentsList = [];
@@ -51,7 +51,6 @@ class _SignupScreenState extends State<SignupScreen> {
     super.dispose();
   }
 
-  // Map profile picture selection to gender
   String _getGenderFromProfilePic() {
     switch (_selectedProfilePic) {
       case 0:
@@ -65,7 +64,6 @@ class _SignupScreenState extends State<SignupScreen> {
     }
   }
 
-  // Get the complete email address
   String _getCompleteEmail() {
     final emailPrefix = _emailController.text.trim();
     if (emailPrefix.isEmpty || _emailSuffix == null) {
@@ -128,11 +126,9 @@ class _SignupScreenState extends State<SignupScreen> {
       _departmentsList = [];
       _batchesList = [];
       _emailSuffix = null;
-      // Clear email when college changes
       _emailController.clear();
     });
 
-    // Handle "No Organization" case
     if (_selectedCollege == 'No Organization') {
       if (mounted) {
         setState(() {
@@ -201,7 +197,6 @@ class _SignupScreenState extends State<SignupScreen> {
       return;
     }
 
-    // Validate profile picture selection
     if (_selectedProfilePic < 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please select a profile picture')),
@@ -216,45 +211,28 @@ class _SignupScreenState extends State<SignupScreen> {
     try {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
-      // Create user data - phone number will be used as document ID automatically
-
-      // Handle "No Organization" case
-      final college =
-          _selectedCollege == 'No Organization' ? null : _selectedCollege;
-      final department =
-          _selectedDepartment == 'No Organization' ? null : _selectedDepartment;
+      final college = _selectedCollege == 'No Organization' ? null : _selectedCollege;
+      final department = _selectedDepartment == 'No Organization' ? null : _selectedDepartment;
       final batch = _selectedBatch == 'No Organization' ? null : _selectedBatch;
-      final email =
-          _selectedCollege == 'No Organization' ? null : _getCompleteEmail();
+      final email = _selectedCollege == 'No Organization' ? null : _getCompleteEmail();
 
       final userData = {
         'username': _nameController.text.trim(),
         'college': college,
-        'email':
-            email, // Store the complete email address or null for no organization
+        'email': email,
         'department': department,
         'batch': batch,
-        'phone_number': widget.phoneNumber, // This will be used as document ID
+        'phone_number': widget.phoneNumber,
         'gender': _getGenderFromProfilePic(),
         'profile_pic_type': _selectedProfilePic,
-        'selectedProfileImage': _selectedProfilePic +
-            1, // Store the selected profile image number (1-based)
-        'profilePicUrl': null, // No custom profile pic initially
-        'created_at': Timestamp.now(),
-        'last_login': Timestamp.now(),
-        'streaks': 0,
-        'coins': 5,
-        'xp': 20,
-        'points': 0, // Add points field for leaderboard
+        'selectedProfileImage': _selectedProfilePic + 1,
+        'profilePicUrl': null,
         'total_request': {
           'practice_mode': 0,
           'test_mode': 0,
         },
-        'daily_usage': 0,
-        'total_usage': 0,
       };
 
-      // Register the user
       await authProvider.registerUser(userData);
 
       if (mounted) {
@@ -262,7 +240,6 @@ class _SignupScreenState extends State<SignupScreen> {
           _isLoading = false;
         });
 
-        // Navigate to home screen
         Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (context) => const NavBar()),
@@ -282,7 +259,6 @@ class _SignupScreenState extends State<SignupScreen> {
     }
   }
 
-  // Profile picture selection widget
   Widget _buildProfilePicSelector() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -299,7 +275,6 @@ class _SignupScreenState extends State<SignupScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
-            // Female avatar
             GestureDetector(
               onTap: () {
                 setState(() {
@@ -355,7 +330,6 @@ class _SignupScreenState extends State<SignupScreen> {
               ),
             ),
 
-            // Male avatar
             GestureDetector(
               onTap: () {
                 setState(() {
@@ -411,7 +385,6 @@ class _SignupScreenState extends State<SignupScreen> {
               ),
             ),
 
-            // Robot avatar (Prefer not to say)
             GestureDetector(
               onTap: () {
                 setState(() {
@@ -503,18 +476,15 @@ class _SignupScreenState extends State<SignupScreen> {
         children: [
           Column(
             children: [
-              // Top background container
               Container(
                 width: double.infinity,
                 color: const Color(0xFFF9F1FF),
                 height: 100.h,
               ),
 
-              // Form with white background
               Expanded(
                 child: SingleChildScrollView(
-                  padding:
-                      EdgeInsets.symmetric(horizontal: 20.w, vertical: 10.h),
+                  padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 10.h),
                   child: Form(
                     key: _formKey,
                     child: Column(
@@ -531,12 +501,10 @@ class _SignupScreenState extends State<SignupScreen> {
                         ),
                         SizedBox(height: 20.h),
 
-                        // Profile Picture Selector
                         _buildProfilePicSelector(),
 
                         SizedBox(height: 30.h),
 
-                        // Full Name
                         Text(
                           'Full Name',
                           style: GoogleFonts.roboto(
@@ -562,21 +530,17 @@ class _SignupScreenState extends State<SignupScreen> {
                             fillColor: Colors.white,
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(8.r),
-                              borderSide:
-                                  BorderSide(color: Colors.grey.shade300),
+                              borderSide: BorderSide(color: Colors.grey.shade300),
                             ),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(8.r),
-                              borderSide:
-                                  BorderSide(color: Colors.grey.shade300),
+                              borderSide: BorderSide(color: Colors.grey.shade300),
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(8.r),
-                              borderSide:
-                                  BorderSide(color: const Color(0xFF3D1560)),
+                              borderSide: BorderSide(color: const Color(0xFF3D1560)),
                             ),
-                            contentPadding: EdgeInsets.symmetric(
-                                horizontal: 16.w, vertical: 14.h),
+                            contentPadding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 14.h),
                           ),
                           validator: (value) {
                             if (value == null || value.isEmpty) {
@@ -587,7 +551,6 @@ class _SignupScreenState extends State<SignupScreen> {
                         ),
                         SizedBox(height: 20.h),
 
-                        // College
                         Text(
                           'College',
                           style: GoogleFonts.roboto(
@@ -610,21 +573,17 @@ class _SignupScreenState extends State<SignupScreen> {
                             fillColor: Colors.white,
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(8.r),
-                              borderSide:
-                                  BorderSide(color: Colors.grey.shade300),
+                              borderSide: BorderSide(color: Colors.grey.shade300),
                             ),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(8.r),
-                              borderSide:
-                                  BorderSide(color: Colors.grey.shade300),
+                              borderSide: BorderSide(color: Colors.grey.shade300),
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(8.r),
-                              borderSide:
-                                  BorderSide(color: const Color(0xFF3D1560)),
+                              borderSide: BorderSide(color: const Color(0xFF3D1560)),
                             ),
-                            contentPadding: EdgeInsets.symmetric(
-                                horizontal: 16.w, vertical: 14.h),
+                            contentPadding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 14.h),
                           ),
                           style: GoogleFonts.roboto(
                             fontSize: 16.sp,
@@ -666,7 +625,6 @@ class _SignupScreenState extends State<SignupScreen> {
                         ),
                         SizedBox(height: 20.h),
 
-                        // Email Address (Organization Email)
                         Text(
                           'Organization Email',
                           style: GoogleFonts.roboto(
@@ -678,7 +636,6 @@ class _SignupScreenState extends State<SignupScreen> {
                         SizedBox(height: 8.h),
                         Row(
                           children: [
-                            // Email prefix input field
                             Expanded(
                               flex: 3,
                               child: TextFormField(
@@ -705,37 +662,32 @@ class _SignupScreenState extends State<SignupScreen> {
                                       topLeft: Radius.circular(8.r),
                                       bottomLeft: Radius.circular(8.r),
                                     ),
-                                    borderSide:
-                                        BorderSide(color: Colors.grey.shade300),
+                                    borderSide: BorderSide(color: Colors.grey.shade300),
                                   ),
                                   enabledBorder: OutlineInputBorder(
                                     borderRadius: BorderRadius.only(
                                       topLeft: Radius.circular(8.r),
                                       bottomLeft: Radius.circular(8.r),
                                     ),
-                                    borderSide:
-                                        BorderSide(color: Colors.grey.shade300),
+                                    borderSide: BorderSide(color: Colors.grey.shade300),
                                   ),
                                   focusedBorder: OutlineInputBorder(
                                     borderRadius: BorderRadius.only(
                                       topLeft: Radius.circular(8.r),
                                       bottomLeft: Radius.circular(8.r),
                                     ),
-                                    borderSide: BorderSide(
-                                        color: const Color(0xFF3D1560)),
+                                    borderSide: BorderSide(color: const Color(0xFF3D1560)),
                                   ),
-                                  contentPadding: EdgeInsets.symmetric(
-                                      horizontal: 16.w, vertical: 14.h),
+                                  contentPadding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 14.h),
                                 ),
                                 enabled: _selectedCollege != null &&
-                                    (_selectedCollege == 'No Organization' ||
-                                        _emailSuffix != null),
+                                    (_selectedCollege == 'No Organization' || _emailSuffix != null),
                                 validator: (value) {
                                   if (_selectedCollege == null) {
                                     return 'Please select your college first';
                                   }
                                   if (_selectedCollege == 'No Organization') {
-                                    return null; // No email validation needed for no organization
+                                    return null;
                                   }
                                   if (_emailSuffix == null) {
                                     return 'Email domain not available for selected college';
@@ -743,29 +695,24 @@ class _SignupScreenState extends State<SignupScreen> {
                                   if (value == null || value.isEmpty) {
                                     return 'Please enter your email prefix';
                                   }
-                                  // Validate email prefix format (no spaces, special characters except dots and underscores)
-                                  if (!RegExp(r'^[a-zA-Z0-9._]+$')
-                                      .hasMatch(value)) {
+                                  if (!RegExp(r'^[a-zA-Z0-9._]+$').hasMatch(value)) {
                                     return 'Invalid email format. Use only letters, numbers, dots, and underscores';
                                   }
                                   return null;
                                 },
                                 onChanged: (value) {
-                                  // Trigger rebuild to update the preview
                                   setState(() {});
                                 },
                               ),
                             ),
 
-                            // Email suffix display
                             Expanded(
                               flex: 2,
                               child: Container(
                                 height: 50.h,
                                 decoration: BoxDecoration(
                                   color: Colors.grey.shade50,
-                                  border:
-                                      Border.all(color: Colors.grey.shade300),
+                                  border: Border.all(color: Colors.grey.shade300),
                                   borderRadius: BorderRadius.only(
                                     topRight: Radius.circular(8.r),
                                     bottomRight: Radius.circular(8.r),
@@ -778,12 +725,9 @@ class _SignupScreenState extends State<SignupScreen> {
                                         : (_emailSuffix ?? '@organization.edu'),
                                     style: GoogleFonts.roboto(
                                       fontSize: 14.sp,
-                                      color:
-                                          _selectedCollege == 'No Organization'
-                                              ? Colors.grey
-                                              : (_emailSuffix != null
-                                                  ? Colors.black87
-                                                  : Colors.grey),
+                                      color: _selectedCollege == 'No Organization'
+                                          ? Colors.grey
+                                          : (_emailSuffix != null ? Colors.black87 : Colors.grey),
                                       fontWeight: FontWeight.w500,
                                     ),
                                   ),
@@ -793,7 +737,6 @@ class _SignupScreenState extends State<SignupScreen> {
                           ],
                         ),
 
-                        // Show email preview if both prefix and suffix are available
                         if (_emailController.text.isNotEmpty &&
                             _emailSuffix != null &&
                             _selectedCollege != 'No Organization')
@@ -811,7 +754,6 @@ class _SignupScreenState extends State<SignupScreen> {
 
                         SizedBox(height: 20.h),
 
-                        // Department
                         Text(
                           'Department',
                           style: GoogleFonts.roboto(
@@ -834,21 +776,17 @@ class _SignupScreenState extends State<SignupScreen> {
                             fillColor: Colors.white,
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(8.r),
-                              borderSide:
-                                  BorderSide(color: Colors.grey.shade300),
+                              borderSide: BorderSide(color: Colors.grey.shade300),
                             ),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(8.r),
-                              borderSide:
-                                  BorderSide(color: Colors.grey.shade300),
+                              borderSide: BorderSide(color: Colors.grey.shade300),
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(8.r),
-                              borderSide:
-                                  BorderSide(color: const Color(0xFF3D1560)),
+                              borderSide: BorderSide(color: const Color(0xFF3D1560)),
                             ),
-                            contentPadding: EdgeInsets.symmetric(
-                                horizontal: 16.w, vertical: 14.h),
+                            contentPadding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 14.h),
                           ),
                           style: GoogleFonts.roboto(
                             fontSize: 16.sp,
@@ -887,7 +825,6 @@ class _SignupScreenState extends State<SignupScreen> {
                         ),
                         SizedBox(height: 20.h),
 
-                        // Batch
                         Text(
                           'Batch',
                           style: GoogleFonts.roboto(
@@ -910,21 +847,17 @@ class _SignupScreenState extends State<SignupScreen> {
                             fillColor: Colors.white,
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(8.r),
-                              borderSide:
-                                  BorderSide(color: Colors.grey.shade300),
+                              borderSide: BorderSide(color: Colors.grey.shade300),
                             ),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(8.r),
-                              borderSide:
-                                  BorderSide(color: Colors.grey.shade300),
+                              borderSide: BorderSide(color: Colors.grey.shade300),
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(8.r),
-                              borderSide:
-                                  BorderSide(color: const Color(0xFF3D1560)),
+                              borderSide: BorderSide(color: const Color(0xFF3D1560)),
                             ),
-                            contentPadding: EdgeInsets.symmetric(
-                                horizontal: 16.w, vertical: 14.h),
+                            contentPadding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 14.h),
                           ),
                           style: GoogleFonts.roboto(
                             fontSize: 16.sp,
@@ -963,7 +896,6 @@ class _SignupScreenState extends State<SignupScreen> {
                         ),
                         SizedBox(height: 40.h),
 
-                        // Register Now Button
                         SizedBox(
                           width: double.infinity,
                           height: 50.h,
@@ -978,8 +910,7 @@ class _SignupScreenState extends State<SignupScreen> {
                               elevation: 0,
                             ),
                             child: _isLoading
-                                ? const CircularProgressIndicator(
-                                    color: Colors.white)
+                                ? const CircularProgressIndicator(color: Colors.white)
                                 : Text(
                                     'Register Now',
                                     style: GoogleFonts.roboto(
@@ -998,10 +929,9 @@ class _SignupScreenState extends State<SignupScreen> {
             ],
           ),
 
-          // Floating atom logo positioned on top right
           Positioned(
-            top: 10.h, // Adjust this value to position the logo vertically
-            right: 20.w, // Adjust this value to position the logo horizontally
+            top: 10.h,
+            right: 20.w,
             child: SizedBox(
               height: 90.h,
               child: Image.asset(

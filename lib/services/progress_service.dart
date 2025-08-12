@@ -67,7 +67,7 @@ class ProgressService {
       // Save to Firebase Realtime Database
       await _database
           .ref()
-          .child('skillbench/progress/${user.uid}/$subjectId')
+          .child('skillbench/users/${user.uid}/progress/$subjectId')
           .set(progressData);
 
       print(
@@ -89,7 +89,7 @@ class ProgressService {
 
       final snapshot = await _database
           .ref()
-          .child('skillbench/progress/${user.uid}/$subjectId')
+          .child('skillbench/users/${user.uid}/progress/$subjectId')
           .get();
 
       if (snapshot.exists) {
@@ -120,7 +120,7 @@ class ProgressService {
       if (user == null) return {};
 
       final snapshot =
-          await _database.ref().child('skillbench/progress/${user.uid}').get();
+          await _database.ref().child('skillbench/users/${user.uid}/progress').get();
 
       if (snapshot.exists) {
         final data = Map<String, dynamic>.from(snapshot.value as Map);
@@ -141,7 +141,7 @@ class ProgressService {
 
     return _database
         .ref()
-        .child('skillbench/progress/${user.uid}/$subjectId')
+        .child('skillbench/users/${user.uid}/progress/$subjectId')
         .onValue
         .map((event) {
       if (event.snapshot.exists) {
@@ -158,7 +158,7 @@ class ProgressService {
 
     return _database
         .ref()
-        .child('skillbench/progress/${user.uid}')
+        .child('skillbench/users/${user.uid}/progress')
         .onValue
         .map((event) {
       if (event.snapshot.exists) {
@@ -316,7 +316,7 @@ class ProgressService {
       final user = _auth.currentUser;
       if (user == null) return;
 
-      await _database.ref().child('skillbench/progress/${user.uid}').remove();
+      await _database.ref().child('skillbench/users/${user.uid}/progress').remove();
 
       print('All progress cleared');
       _notifyProgressUpdate();

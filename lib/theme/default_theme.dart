@@ -363,12 +363,7 @@ class AppTheme {
             return Colors.grey.shade300;
           }
           if (states.contains(WidgetState.selected)) {
-            return Color.fromRGBO(
-              (primaryColor.red),
-              (primaryColor.green),
-              (primaryColor.blue),
-              0.5,
-            );
+            return primaryColor.withOpacity(0.5);
           }
           return Colors.grey.shade300;
         }),

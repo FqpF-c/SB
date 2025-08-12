@@ -20,17 +20,17 @@ class HeaderPatternPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final Paint paint = Paint()
-      ..color = Color.fromRGBO(168, 130, 201, 0.452) 
+      ..color = Color.fromRGBO(168, 130, 201, 0.452)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5;
-    
-    final centerX = size.width * 1.1;  
+
+    final centerX = size.width * 1.1;
     final centerY = size.height * 0.2;
-    
-    for (int i = 1; i <= 7; i++) { 
+
+    for (int i = 1; i <= 7; i++) {
       canvas.drawCircle(
         Offset(centerX, centerY),
-        23.0 * i, 
+        23.0 * i,
         paint,
       );
     }
@@ -42,39 +42,39 @@ class HeaderPatternPainter extends CustomPainter {
 
 class CirclePatternPainter extends CustomPainter {
   final Color color;
-  
+
   CirclePatternPainter({
-    this.color = const Color.fromRGBO(100, 68, 128, 1), 
+    this.color = const Color.fromRGBO(100, 68, 128, 1),
   });
-  
+
   @override
   void paint(Canvas canvas, Size size) {
     final topRight = Offset(size.width, 0);
 
     final paint1 = Paint()
-      ..color = color.withOpacity(0.15) 
+      ..color = color.withOpacity(0.15)
       ..style = PaintingStyle.fill;
     canvas.drawCircle(
       topRight,
       size.width * 0.9,
       paint1,
     );
-    
+
     final paint2 = Paint()
       ..color = color.withOpacity(0.20)
       ..style = PaintingStyle.fill;
     canvas.drawCircle(
       topRight,
-      size.width * 0.7, 
+      size.width * 0.7,
       paint2,
     );
 
     final paint3 = Paint()
-      ..color = color.withOpacity(0.25) 
+      ..color = color.withOpacity(0.25)
       ..style = PaintingStyle.fill;
     canvas.drawCircle(
       topRight,
-      size.width * 0.5, 
+      size.width * 0.5,
       paint3,
     );
 
@@ -82,12 +82,12 @@ class CirclePatternPainter extends CustomPainter {
       ..color = color.withOpacity(0.30)
       ..style = PaintingStyle.fill;
     canvas.drawCircle(
-      topRight, 
+      topRight,
       size.width * 0.3,
       paint4,
     );
   }
-  
+
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
@@ -132,51 +132,51 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   int _completed = 2;
   int _studyHours = 128;
   bool _isLoading = true;
-  
+
   List<String> _categoryTitles = [];
   Map<String, List<Map<String, dynamic>>> _categoryItems = {};
-  
+
   late List<AnimationController> _shapeControllers;
   late List<Animation<double>> _shapeAnimations;
 
-static const Map<String, String> _topicAssetMap = {
-  'c': 'assets/home_page/c.png',
-  'c++': 'assets/home_page/cpp.png',
-  'cpp': 'assets/home_page/cpp.png',
-  'java': 'assets/home_page/java.png',
-  'python': 'assets/home_page/python.png',
-  'kotlin': 'assets/home_page/kotlin.png',
-  'swift': 'assets/home_page/swift.png',
-  'flutter': 'assets/home_page/flutter.png',
-  'react': 'assets/home_page/react.png',
-  'web development': 'assets/home_page/web_development.png',
-  'web': 'assets/home_page/web_development.png',
-  'aws': 'assets/home_page/aws.png',
-  'amazon web services': 'assets/home_page/aws.png',
-  'google cloud': 'assets/home_page/google-cloud.png',
-  'gcp': 'assets/home_page/google-cloud.png',
-  'azure': 'assets/home_page/azure.png',
-  'microsoft azure': 'assets/home_page/azure.png',
-  'excel': 'assets/home_page/excel.png',
-  'microsoft excel': 'assets/home_page/excel.png',
-  'css': 'assets/home_page/css.png',
-  'css3': 'assets/home_page/css.png',
-  'javascript': 'assets/home_page/javascript.png',
-  'js': 'assets/home_page/javascript.png',
-  'powerpoint': 'assets/home_page/powerpoint.png',
-  'microsoft powerpoint': 'assets/home_page/powerpoint.png',
-  'ppt': 'assets/home_page/powerpoint.png',
-  'html': 'assets/home_page/html.png',
-  'html5': 'assets/home_page/html.png',
-  'react native': 'assets/home_page/react.png',
-  'react-native': 'assets/home_page/react.png',
-  'reactnative': 'assets/home_page/react.png',
-};
-  
+  static const Map<String, String> _topicAssetMap = {
+    'c': 'assets/home_page/c.png',
+    'c++': 'assets/home_page/cpp.png',
+    'cpp': 'assets/home_page/cpp.png',
+    'java': 'assets/home_page/java.png',
+    'python': 'assets/home_page/python.png',
+    'kotlin': 'assets/home_page/kotlin.png',
+    'swift': 'assets/home_page/swift.png',
+    'flutter': 'assets/home_page/flutter.png',
+    'react': 'assets/home_page/react.png',
+    'web development': 'assets/home_page/web_development.png',
+    'web': 'assets/home_page/web_development.png',
+    'aws': 'assets/home_page/aws.png',
+    'amazon web services': 'assets/home_page/aws.png',
+    'google cloud': 'assets/home_page/google-cloud.png',
+    'gcp': 'assets/home_page/google-cloud.png',
+    'azure': 'assets/home_page/azure.png',
+    'microsoft azure': 'assets/home_page/azure.png',
+    'excel': 'assets/home_page/excel.png',
+    'microsoft excel': 'assets/home_page/excel.png',
+    'css': 'assets/home_page/css.png',
+    'css3': 'assets/home_page/css.png',
+    'javascript': 'assets/home_page/javascript.png',
+    'js': 'assets/home_page/javascript.png',
+    'powerpoint': 'assets/home_page/powerpoint.png',
+    'microsoft powerpoint': 'assets/home_page/powerpoint.png',
+    'ppt': 'assets/home_page/powerpoint.png',
+    'html': 'assets/home_page/html.png',
+    'html5': 'assets/home_page/html.png',
+    'react native': 'assets/home_page/react.png',
+    'react-native': 'assets/home_page/react.png',
+    'reactnative': 'assets/home_page/react.png',
+  };
+
   @override
   void initState() {
     super.initState();
-    
+
     _shapeControllers = List.generate(12, (index) {
       return AnimationController(
         duration: Duration(milliseconds: 2000 + (index * 300)),
@@ -200,17 +200,17 @@ static const Map<String, String> _topicAssetMap = {
     setState(() {
       _isLoading = true;
     });
-    
+
     await _loadUserData();
     await _loadCategoryTitles();
-    
+
     if (mounted) {
       setState(() {
         _isLoading = false;
       });
     }
   }
-  
+
   @override
   void dispose() {
     for (var controller in _shapeControllers) {
@@ -221,17 +221,17 @@ static const Map<String, String> _topicAssetMap = {
 
   String _getAssetForTopic(String topicName) {
     final String normalizedName = topicName.toLowerCase().trim();
-    
+
     if (_topicAssetMap.containsKey(normalizedName)) {
       return _topicAssetMap[normalizedName]!;
     }
-    
+
     for (String key in _topicAssetMap.keys) {
       if (normalizedName.contains(key) || key.contains(normalizedName)) {
         return _topicAssetMap[key]!;
       }
     }
-    
+
     return 'assets/icons/code_icon.png';
   }
 
@@ -246,52 +246,51 @@ static const Map<String, String> _topicAssetMap = {
 
   Color _getColorForTopic(String topicName) {
     final String normalizedName = topicName.toLowerCase().trim();
-    
-    const Map<String, Color> categoryColors = {
-  'c': Color(0xFF5C6BC0),
-  'c++': Color(0xFF42A5F5),
-  'cpp': Color(0xFF42A5F5),
-  'java': Color(0xFFEF5350),
-  'python': Color(0xFF66BB6A),
-  'kotlin': Color(0xFFAB47BC),
-  'swift': Color(0xFFFF7043),
-  'flutter': Color(0xFF29B6F6),
-  'react native': Color(0xFF26C6DA),
-  'react-native': Color(0xFF26C6DA),
-  'reactnative': Color(0xFF26C6DA),
-  'react': Color(0xFF26C6DA),
-  'web development': Color(0xFF26A69A),
-  'web': Color(0xFF26A69A),
-  'aws': Color(0xFFFF9800),
-  'amazon web services': Color(0xFFFF9800),
-  'google cloud': Color(0xFF4285F4),
-  'gcp': Color(0xFF4285F4),
-  'azure': Color(0xFF0078D4),
-  'microsoft azure': Color(0xFF0078D4),
-  'excel': Color(0xFF4CAF50),
-  'microsoft excel': Color(0xFF4CAF50),
-  'css': Color(0xFF1572B6),
-  'css3': Color(0xFF1572B6),
-  'javascript': Color(0xFFF7DF1E),
-  'js': Color(0xFFF7DF1E),
-  'powerpoint': Color(0xFFB7472A),
-  'microsoft powerpoint': Color(0xFFB7472A),
-  'ppt': Color(0xFFB7472A),
-  'html': Color(0xFFE34F26), 
-  'html5': Color(0xFFE34F26),
-};
 
-    
+    const Map<String, Color> categoryColors = {
+      'c': Color(0xFF5C6BC0),
+      'c++': Color(0xFF42A5F5),
+      'cpp': Color(0xFF42A5F5),
+      'java': Color(0xFFEF5350),
+      'python': Color(0xFF66BB6A),
+      'kotlin': Color(0xFFAB47BC),
+      'swift': Color(0xFFFF7043),
+      'flutter': Color(0xFF29B6F6),
+      'react native': Color(0xFF26C6DA),
+      'react-native': Color(0xFF26C6DA),
+      'reactnative': Color(0xFF26C6DA),
+      'react': Color(0xFF26C6DA),
+      'web development': Color(0xFF26A69A),
+      'web': Color(0xFF26A69A),
+      'aws': Color(0xFFFF9800),
+      'amazon web services': Color(0xFFFF9800),
+      'google cloud': Color(0xFF4285F4),
+      'gcp': Color(0xFF4285F4),
+      'azure': Color(0xFF0078D4),
+      'microsoft azure': Color(0xFF0078D4),
+      'excel': Color(0xFF4CAF50),
+      'microsoft excel': Color(0xFF4CAF50),
+      'css': Color(0xFF1572B6),
+      'css3': Color(0xFF1572B6),
+      'javascript': Color(0xFFF7DF1E),
+      'js': Color(0xFFF7DF1E),
+      'powerpoint': Color(0xFFB7472A),
+      'microsoft powerpoint': Color(0xFFB7472A),
+      'ppt': Color(0xFFB7472A),
+      'html': Color(0xFFE34F26),
+      'html5': Color(0xFFE34F26),
+    };
+
     if (categoryColors.containsKey(normalizedName)) {
       return categoryColors[normalizedName]!;
     }
-    
+
     for (String key in categoryColors.keys) {
       if (normalizedName.contains(key) || key.contains(normalizedName)) {
         return categoryColors[key]!;
       }
     }
-    
+
     return const Color(0xFF366D9C);
   }
 
@@ -309,64 +308,23 @@ static const Map<String, String> _topicAssetMap = {
   Future<void> _loadUserData() async {
     try {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      
-      final phoneNumber = await SecureStorage.read('phone_number');
-
-
-      if (phoneNumber == null) {
-        if (mounted) {
-          setState(() {
-            _username = 'Guest';
-            _isLoading = false;
-          });
-        }
-        return;
-      }
 
       final firestoreData = await authProvider.getCurrentUserData();
-      
+      final realtimeData = await authProvider.getUserStatsFromRealtimeDB();
+
       if (firestoreData != null) {
         final username = firestoreData['username'] ?? 'User';
-        
-        try {
-          // Use phone number for database reference instead of UID
-          final databaseRef = FirebaseDatabase.instance.ref().child('skillbench/users/${phoneNumber}');
-          final dataSnapshot = await databaseRef.get();
-          
-          if (dataSnapshot.exists) {
-            final data = dataSnapshot.value as Map<dynamic, dynamic>;
-            
-            if (mounted) {
-              setState(() {
-                _username = username;
-                _coins = data['coins'] ?? 0;
-                _streaks = data['streaks'] ?? 0;
-                _xp = data['xp'] ?? 0;
-                _isLoading = false;
-              });
+
+        if (mounted) {
+          setState(() {
+            _username = username;
+            if (realtimeData != null) {
+              _coins = realtimeData['coins'] ?? 0;
+              _streaks = realtimeData['streaks'] ?? 0;
+              _xp = realtimeData['xp'] ?? 0;
             }
-          } else {
-            if (mounted) {
-              setState(() {
-                _username = username;
-                _coins = firestoreData['coins'] ?? 0;
-                _streaks = firestoreData['streaks'] ?? 0;
-                _xp = firestoreData['xp'] ?? 0;
-                _isLoading = false;
-              });
-            }
-          }
-        } catch (e) {
-          print('Database error: $e');
-          if (mounted) {
-            setState(() {
-              _username = username;
-              _coins = firestoreData['coins'] ?? 0;
-              _streaks = firestoreData['streaks'] ?? 0;
-              _xp = firestoreData['xp'] ?? 0;
-              _isLoading = false;
-            });
-          }
+            _isLoading = false;
+          });
         }
       } else {
         if (mounted) {
@@ -391,20 +349,20 @@ static const Map<String, String> _topicAssetMap = {
     try {
       final titlesRef = FirebaseFirestore.instance.doc('/prep/Title');
       final docSnapshot = await titlesRef.get();
-      
+
       if (docSnapshot.exists && docSnapshot.data() != null) {
         final data = docSnapshot.data()!;
         if (data.containsKey('Title') && data['Title'] is List) {
           final List<String> titles = List<String>.from(data['Title']);
-          
+
           if (mounted) {
             setState(() {
               _categoryTitles = titles;
             });
           }
-          
+
           print('Loaded category titles: $_categoryTitles');
-          
+
           for (final title in titles) {
             if (title != 'Programming Language') {
               await _loadCategoryItems(title);
@@ -416,31 +374,33 @@ static const Map<String, String> _topicAssetMap = {
       print('Error loading category titles: $e');
     }
   }
-  
+
   Future<void> _loadCategoryItems(String category) async {
     try {
       print('Loading items for category: $category');
-      final categoryItemsRef = FirebaseFirestore.instance.doc('/prep/Title/$category/$category');
+      final categoryItemsRef =
+          FirebaseFirestore.instance.doc('/prep/Title/$category/$category');
       final docSnapshot = await categoryItemsRef.get();
-      
+
       if (docSnapshot.exists && docSnapshot.data() != null) {
         final data = docSnapshot.data()!;
-        
+
         print('Category document data: $data');
-        
+
         if (data.containsKey(category) && data[category] is List) {
           final List<dynamic> rawItems = data[category];
           print('Raw items for $category: $rawItems');
-          
+
           final List<Map<String, dynamic>> formattedItems = [];
-          
+
           for (var item in rawItems) {
             Map<String, dynamic> formattedItem;
             String itemName;
-            
+
             if (item is Map) {
               formattedItem = Map<String, dynamic>.from(item as Map);
-              itemName = formattedItem['name'] ?? formattedItem.keys.first.toString();
+              itemName =
+                  formattedItem['name'] ?? formattedItem.keys.first.toString();
             } else if (item is String) {
               itemName = item;
               formattedItem = {'name': itemName};
@@ -448,23 +408,23 @@ static const Map<String, String> _topicAssetMap = {
               itemName = item.toString();
               formattedItem = {'name': itemName};
             }
-            
+
             String assetPath = _getAssetForTopic(itemName);
             formattedItem['iconPath'] = assetPath;
             formattedItem['icon'] = assetPath;
             formattedItem['color'] = _getColorForTopic(itemName);
-            
+
             if (!formattedItem.containsKey('name')) {
               formattedItem['name'] = itemName;
             }
-            
+
             print('Item: $itemName -> Asset: $assetPath');
-            
+
             formattedItems.add(formattedItem);
           }
-          
+
           print('Formatted items for $category: $formattedItems');
-          
+
           if (mounted) {
             setState(() {
               _categoryItems[category] = formattedItems;
@@ -483,7 +443,7 @@ static const Map<String, String> _topicAssetMap = {
       statusBarColor: Colors.transparent,
       statusBarIconBrightness: Brightness.light,
     ));
-    
+
     return Scaffold(
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -500,11 +460,9 @@ static const Map<String, String> _topicAssetMap = {
                   SliverToBoxAdapter(
                     child: _buildWelcomeHeader(),
                   ),
-                  
                   SliverToBoxAdapter(
                     child: _buildStatsBox(),
                   ),
-                  
                   SliverToBoxAdapter(
                     child: Transform.translate(
                       offset: const Offset(0, -40),
@@ -516,19 +474,16 @@ static const Map<String, String> _topicAssetMap = {
                             getAssetForTopic: _getAssetForTopic,
                             getColorForTopic: _getColorForTopic,
                           ),
-                          
                           TechnologiesWidget(
                             categoryItems: _categoryItems,
                             categoryTitles: _categoryTitles,
                             getAssetForTopic: _getAssetForTopic,
                             getColorForTopic: _getColorForTopic,
                           ),
-                          
                           ProgrammingLanguagesWidget(
                             getAssetForTopic: _getAssetForTopic,
                             getColorForTopic: _getColorForTopic,
                           ),
-                          
                           SizedBox(height: 80.h),
                         ],
                       ),
@@ -543,7 +498,7 @@ static const Map<String, String> _topicAssetMap = {
   Widget _buildWelcomeHeader() {
     final screenWidth = MediaQuery.of(context).size.width;
     final bool isSmallScreen = screenWidth < 360;
-    
+
     return Stack(
       clipBehavior: Clip.none,
       children: [
@@ -567,18 +522,12 @@ static const Map<String, String> _topicAssetMap = {
           child: SafeArea(
             bottom: false,
             child: Padding(
-              padding: EdgeInsets.fromLTRB(
-                isSmallScreen ? 20 : 40,
-                20,
-                20, 
-                20
-              ),
+              padding: EdgeInsets.fromLTRB(isSmallScreen ? 20 : 40, 20, 20, 20),
               child: Column(
                 mainAxisSize: MainAxisSize.max,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Spacer(flex: 1),
-                  
                   Row(
                     children: [
                       Icon(
@@ -598,7 +547,6 @@ static const Map<String, String> _topicAssetMap = {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  
                   Row(
                     children: [
                       Text(
@@ -623,7 +571,6 @@ static const Map<String, String> _topicAssetMap = {
                     ],
                   ),
                   const SizedBox(height: 4),
-                  
                   Container(
                     margin: EdgeInsets.only(top: 5.h, bottom: 25.h),
                     width: 75.w,
@@ -633,18 +580,14 @@ static const Map<String, String> _topicAssetMap = {
                       borderRadius: BorderRadius.circular(2.r),
                     ),
                   ),
-                  
                   const Spacer(flex: 1),
-                  
                   _buildWelcomeHeaderStatsRow(),
-                  
                   SizedBox(height: isSmallScreen ? 5 : 10),
                 ],
               ),
             ),
           ),
         ),
-        
         Positioned(
           top: -60,
           right: 20,
@@ -663,7 +606,11 @@ static const Map<String, String> _topicAssetMap = {
   Widget _buildWelcomeHeaderStatsRow() {
     final screenWidth = MediaQuery.of(context).size.width;
 
-    final double rowSpacing = screenWidth < 360 ? 15 : screenWidth < 400 ? 20 : 30;
+    final double rowSpacing = screenWidth < 360
+        ? 15
+        : screenWidth < 400
+            ? 20
+            : 30;
     final double containerHeight = screenWidth < 360 ? 40 : 50;
 
     return Container(
@@ -673,7 +620,8 @@ static const Map<String, String> _topicAssetMap = {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          _buildStatPill(Icons.local_fire_department, _streaks.toString(), null),
+          _buildStatPill(
+              Icons.local_fire_department, _streaks.toString(), null),
           _buildStatPill(Icons.currency_rupee, _coins.toString(), null),
           _buildStatPill(Icons.emoji_events, _xp.toString(), null),
         ],
@@ -695,7 +643,7 @@ static const Map<String, String> _topicAssetMap = {
 
     final screenWidth = MediaQuery.of(context).size.width;
     final scale = screenWidth < 360 ? 0.8 : 1.0;
-    
+
     final double horizontalPadding = screenWidth < 360 ? 1 : 2;
     final double rightPadding = screenWidth < 360 ? 12 : 23;
     final double iconTextSpacing = screenWidth < 360 ? 6 : 12;
@@ -704,11 +652,7 @@ static const Map<String, String> _topicAssetMap = {
 
     return Container(
       padding: EdgeInsets.only(
-        left: horizontalPadding, 
-        right: rightPadding, 
-        top: 1, 
-        bottom: 1
-      ),
+          left: horizontalPadding, right: rightPadding, top: 1, bottom: 1),
       decoration: BoxDecoration(
         border: Border.all(
           color: const Color.fromRGBO(95, 38, 105, 1),
@@ -758,9 +702,8 @@ static const Map<String, String> _topicAssetMap = {
   }
 
   Widget _buildStatsBox() {
-  // Import your new Firebase stats widget at the top of the file
-  return FirebaseStatsRowWidget();
-}
+    return FirebaseStatsRowWidget();
+  }
 
   Widget _buildStatItem({
     required IconData icon,
@@ -797,9 +740,9 @@ static const Map<String, String> _topicAssetMap = {
   }
 
   Widget _buildSectionHeader(String title) {
-    bool isProgrammingLanguageSection = title == 'Programming Language' || 
-                                        title == 'Programming Languages';
-    
+    bool isProgrammingLanguageSection =
+        title == 'Programming Language' || title == 'Programming Languages';
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       child: Row(
@@ -813,14 +756,16 @@ static const Map<String, String> _topicAssetMap = {
               color: Colors.black87,
             ),
           ),
-          isProgrammingLanguageSection ? Text(
-            "View all",
-            style: TextStyle(
-              fontSize: 14,
-              color: Color.fromRGBO(237, 85, 100, 1),
-              fontWeight: FontWeight.w500,
-            ),
-          ) : SizedBox(),
+          isProgrammingLanguageSection
+              ? Text(
+                  "View all",
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Color.fromRGBO(237, 85, 100, 1),
+                    fontWeight: FontWeight.w500,
+                  ),
+                )
+              : SizedBox(),
         ],
       ),
     );

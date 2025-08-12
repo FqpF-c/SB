@@ -29,7 +29,8 @@ void main() async {
   // ✅ Firebase App Check
   await FirebaseAppCheck.instance.activate(
     androidProvider: AndroidProvider.playIntegrity,
-    webProvider: ReCaptchaV3Provider('recaptcha-v3-site-key'), // Replace with real site key if used
+    webProvider: ReCaptchaV3Provider(
+        'recaptcha-v3-site-key'), // Replace with real site key if used
   );
 
   // ✅ Initialize Local Notifications
@@ -130,7 +131,8 @@ class _AuthCheckScreenState extends State<AuthCheckScreen> {
       } else {
         if (userLoggedIn) {
           await authProvider.checkStreakStatusAndNotify();
-          Provider.of<ProgressProvider>(context, listen: false).loadAllProgress();
+          Provider.of<ProgressProvider>(context, listen: false)
+              .loadAllProgress();
 
           if (mounted) {
             Navigator.pushReplacement(

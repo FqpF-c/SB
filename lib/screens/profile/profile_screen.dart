@@ -1,19 +1,15 @@
 import 'dart:io';
-import 'dart:ui' as ui;
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:flutter_animate/flutter_animate.dart';
-import '../../providers/theme_provider.dart';
 import '../../screens/auth/login_screen.dart';
-import '../../providers/auth_provider.dart';
-import 'dart:typed_data';
-import 'package:flutter/services.dart';
+import '../../providers/auth_provider.dart' as app_auth;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'settings_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -68,7 +64,7 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
       setState(() => isLoading = true);
 
       // Get the auth provider
-      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final authProvider = Provider.of<app_auth.AuthProvider>(context, listen: false);
       
       // Get user data from provider
       final userData = await authProvider.getCurrentUserData();
@@ -109,13 +105,20 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
       setState(() => isLoading = true);
 
       // Get the auth provider
-      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final authProvider = Provider.of<app_auth.AuthProvider>(context, listen: false);
       
-      // Get current user's phone number
-      final phoneNumber = await authProvider.getCurrentUserPhone();
-      if (phoneNumber == null) {
+      // Get current user from Firebase Auth
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
         throw Exception('User session not found');
       }
+      
+      // Get user data to find phone number
+      final userData = await authProvider.getCurrentUserData();
+      if (userData == null) {
+        throw Exception('User data not found');
+      }
+      final phoneNumber = userData['phone_number'];
 
       final String fileName = 'profile_${DateTime.now().millisecondsSinceEpoch}.jpg';
       final Reference storageRef = FirebaseStorage.instance
@@ -127,16 +130,18 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
       final TaskSnapshot snapshot = await uploadTask;
       final String downloadUrl = await snapshot.ref.getDownloadURL();
 
-      // Use phone number as document ID and clear selectedProfileImage when custom image is uploaded
+      // Use Firebase UID as document ID and clear selectedProfileImage when custom image is uploaded
       await FirebaseFirestore.instance
           .collection('skillbench')
           .doc('ALL_USERS')
           .collection('users')
-          .doc(phoneNumber)  // Use phone number directly as document ID
-          .update({
+          .doc(user.uid)  // Use Firebase UID as document ID
+          .set({
+            'phone_number': phoneNumber,
+            'firebase_uid': user.uid,
             'profilePicUrl': downloadUrl,
             'selectedProfileImage': null, // Clear preset selection when custom image is uploaded
-          });
+          }, SetOptions(merge: true));
 
       if (mounted) {
         setState(() {
@@ -158,24 +163,33 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
   Future<void> _setPresetProfileImage(int imageNumber) async {
     try {
       // Get the auth provider
-      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final authProvider = Provider.of<app_auth.AuthProvider>(context, listen: false);
       
-      // Get current user's phone number
-      final phoneNumber = await authProvider.getCurrentUserPhone();
-      if (phoneNumber == null) {
+      // Get current user from Firebase Auth
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
         throw Exception('User session not found');
       }
+      
+      // Get user data to find phone number
+      final userData = await authProvider.getCurrentUserData();
+      if (userData == null) {
+        throw Exception('User data not found');
+      }
+      final phoneNumber = userData['phone_number'];
 
       // Update Firestore with the new preset selection
       await FirebaseFirestore.instance
           .collection('skillbench')
           .doc('ALL_USERS')
           .collection('users')
-          .doc(phoneNumber)
-          .update({
+          .doc(user.uid)
+          .set({
+            'phone_number': phoneNumber,
+            'firebase_uid': user.uid,
             'selectedProfileImage': imageNumber,
             'profilePicUrl': null, // Clear custom image URL when preset is selected
-          });
+          }, SetOptions(merge: true));
 
       setState(() {
         selectedProfileImage = imageNumber;
@@ -649,7 +663,7 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
       );
       
       // Get auth provider
-      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final authProvider = Provider.of<app_auth.AuthProvider>(context, listen: false);
       
       // Sign out using the auth provider
       await authProvider.signOut();

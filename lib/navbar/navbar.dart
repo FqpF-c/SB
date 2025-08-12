@@ -4,11 +4,11 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../screens/home/home_screen.dart';
 import '../screens/academics/academics_screen.dart';
-import '../screens/lead/lead_screen.dart';
+import '../screens/lead/simple_new_leaderboard.dart';
 import '../screens/profile/profile_screen.dart';
 
 class NavBar extends StatefulWidget {
-  const NavBar({Key? key}) : super(key: key);
+  const NavBar({super.key});
 
   @override
   State<NavBar> createState() => _NavBarState();
@@ -20,7 +20,7 @@ class _NavBarState extends State<NavBar> {
   final List<Widget> _screens = [
     const HomeScreen(),
     const AcademicsScreen(),
-    const LeadScreen(),
+    const SimpleNewLeaderboard(),
     const ProfileScreen(),
   ];
 
