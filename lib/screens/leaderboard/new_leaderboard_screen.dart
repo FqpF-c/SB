@@ -15,6 +15,7 @@ import '../../widgets/leaderboard/top_performers_card.dart';
 import '../../widgets/leaderboard/your_rank_card.dart';
 import '../../widgets/leaderboard/user_list_item.dart';
 import '../../widgets/leaderboard/filter_controls.dart';
+import '../../utils/dynamic_status_bar.dart';
 
 /// New leaderboard screen with modern design and smooth animations
 class NewLeaderboardScreen extends StatefulWidget {
@@ -25,8 +26,7 @@ class NewLeaderboardScreen extends StatefulWidget {
 }
 
 class _NewLeaderboardScreenState extends State<NewLeaderboardScreen>
-    with TickerProviderStateMixin {
-  late ScrollController _scrollController;
+    with TickerProviderStateMixin, DynamicStatusBarMixin {
   late AnimationController _fadeController;
   late AnimationController _staggerController;
   late List<Animation<double>> _staggerAnimations;
@@ -39,8 +39,7 @@ class _NewLeaderboardScreenState extends State<NewLeaderboardScreen>
   }
 
   void _setupControllers() {
-    _scrollController = ScrollController();
-    _scrollController.addListener(_onScroll);
+    scrollController.addListener(_onScroll);
 
     _fadeController = AnimationController(
       duration: const Duration(milliseconds: 600),
@@ -79,15 +78,14 @@ class _NewLeaderboardScreenState extends State<NewLeaderboardScreen>
         Provider.of<NewLeaderboardProvider>(context, listen: false);
 
     // Load more when near bottom
-    if (_scrollController.position.pixels >=
-        _scrollController.position.maxScrollExtent - 200) {
+    if (scrollController.position.pixels >=
+        scrollController.position.maxScrollExtent - 200) {
       provider.loadMoreUsers();
     }
   }
 
   @override
   void dispose() {
-    _scrollController.dispose();
     _fadeController.dispose();
     _staggerController.dispose();
     super.dispose();
@@ -95,7 +93,7 @@ class _NewLeaderboardScreenState extends State<NewLeaderboardScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return DynamicStatusBar.buildDynamicScaffold(
       body: Consumer<NewLeaderboardProvider>(
         builder: (context, provider, child) {
           if (provider.hasRetriableError) {
@@ -116,182 +114,182 @@ class _NewLeaderboardScreenState extends State<NewLeaderboardScreen>
               ),
 
               // Main content
-              SafeArea(
-                child: RefreshIndicator(
-                  onRefresh: provider.refresh,
-                  color: SBColors.gradientStart,
-                  backgroundColor: Colors.white,
-                  child: CustomScrollView(
-                    controller: _scrollController,
-                    physics: const BouncingScrollPhysics(),
-                    slivers: [
-                      // Header
-                      SliverToBoxAdapter(
+              RefreshIndicator(
+                onRefresh: provider.refresh,
+                color: SBColors.gradientStart,
+                backgroundColor: Colors.white,
+                displacement: 0.0, // Prevent visual pulling
+                strokeWidth: 3.0,
+                child: CustomScrollView(
+                  controller: scrollController,
+                  physics: const ClampingScrollPhysics(),
+                  slivers: [
+                    // Header
+                    SliverToBoxAdapter(
+                      child: FadeTransition(
+                        opacity: _staggerAnimations[0],
+                        child: SlideTransition(
+                          position: Tween<Offset>(
+                            begin: const Offset(0, -0.2),
+                            end: Offset.zero,
+                          ).animate(_staggerAnimations[0]),
+                          child: LeaderboardHeader(
+                            onBackPressed: () => Navigator.of(context).pop(),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // Welcome Hub Card (overlapping header)
+                    SliverToBoxAdapter(
+                      child: Transform.translate(
+                        offset: Offset(0, -SBConstants.statsCardOverlap),
                         child: FadeTransition(
-                          opacity: _staggerAnimations[0],
+                          opacity: _staggerAnimations[1],
                           child: SlideTransition(
                             position: Tween<Offset>(
-                              begin: const Offset(0, -0.2),
+                              begin: const Offset(0, 0.3),
                               end: Offset.zero,
-                            ).animate(_staggerAnimations[0]),
-                            child: LeaderboardHeader(
-                              onBackPressed: () => Navigator.of(context).pop(),
-                            ),
+                            ).animate(_staggerAnimations[1]),
+                            child: provider.isLoading
+                                ? const WelcomeHubCardSkeleton()
+                                : WelcomeHubCard(stats: provider.stats),
                           ),
                         ),
                       ),
+                    ),
 
-                      // Welcome Hub Card (overlapping header)
-                      SliverToBoxAdapter(
-                        child: Transform.translate(
-                          offset: Offset(0, -SBConstants.statsCardOverlap),
-                          child: FadeTransition(
-                            opacity: _staggerAnimations[1],
-                            child: SlideTransition(
-                              position: Tween<Offset>(
-                                begin: const Offset(0, 0.3),
-                                end: Offset.zero,
-                              ).animate(_staggerAnimations[1]),
-                              child: provider.isLoading
-                                  ? const WelcomeHubCardSkeleton()
-                                  : WelcomeHubCard(stats: provider.stats),
-                            ),
+                    // Filter Controls
+                    SliverToBoxAdapter(
+                      child: Transform.translate(
+                        offset:
+                            Offset(0, -SBConstants.statsCardOverlap + SBGap.lg),
+                        child: FadeTransition(
+                          opacity: _staggerAnimations[1],
+                          child: FilterControls(
+                            selectedTimeframe: provider.filters.timeframe,
+                            onTimeframeChanged: provider.setTimeframe,
+                            selectedGroup: provider.filters.group,
+                            onGroupChanged: provider.setGroup,
+                            selectedCategory: provider.filters.category,
+                            onCategoryChanged: provider.setCategory,
+                            filterOptions: provider.filterOptions,
+                            showLegacyToggle: true,
                           ),
                         ),
                       ),
+                    ),
 
-                      // Filter Controls
-                      SliverToBoxAdapter(
-                        child: Transform.translate(
-                          offset: Offset(
-                              0, -SBConstants.statsCardOverlap + SBGap.lg),
-                          child: FadeTransition(
-                            opacity: _staggerAnimations[1],
-                            child: FilterControls(
+                    // Top Performers Card
+                    SliverToBoxAdapter(
+                      child: Transform.translate(
+                        offset: Offset(
+                            0, -SBConstants.statsCardOverlap + (SBGap.lg * 2)),
+                        child: FadeTransition(
+                          opacity: _staggerAnimations[2],
+                          child: SlideTransition(
+                            position: Tween<Offset>(
+                              begin: const Offset(0, 0.3),
+                              end: Offset.zero,
+                            ).animate(_staggerAnimations[2]),
+                            child: TopPerformersCard(
+                              topThree: provider.topThree,
                               selectedTimeframe: provider.filters.timeframe,
                               onTimeframeChanged: provider.setTimeframe,
-                              selectedGroup: provider.filters.group,
-                              onGroupChanged: provider.setGroup,
-                              selectedCategory: provider.filters.category,
-                              onCategoryChanged: provider.setCategory,
-                              filterOptions: provider.filterOptions,
-                              showLegacyToggle: true,
+                              isLoading: provider.isLoading,
                             ),
                           ),
                         ),
                       ),
+                    ),
 
-                      // Top Performers Card
+                    // Your Rank Card (if not in top 3)
+                    if (provider.currentUser != null &&
+                        !provider.isCurrentUserInTopThree)
                       SliverToBoxAdapter(
                         child: Transform.translate(
                           offset: Offset(0,
                               -SBConstants.statsCardOverlap + (SBGap.lg * 2)),
                           child: FadeTransition(
                             opacity: _staggerAnimations[2],
-                            child: SlideTransition(
-                              position: Tween<Offset>(
-                                begin: const Offset(0, 0.3),
-                                end: Offset.zero,
-                              ).animate(_staggerAnimations[2]),
-                              child: TopPerformersCard(
-                                topThree: provider.topThree,
-                                selectedTimeframe: provider.filters.timeframe,
-                                onTimeframeChanged: provider.setTimeframe,
-                                isLoading: provider.isLoading,
-                              ),
+                            child: YourRankCard(
+                              currentUser: provider.currentUser!,
+                              isLoading: provider.isLoading,
                             ),
                           ),
                         ),
                       ),
 
-                      // Your Rank Card (if not in top 3)
-                      if (provider.currentUser != null &&
-                          !provider.isCurrentUserInTopThree)
-                        SliverToBoxAdapter(
-                          child: Transform.translate(
-                            offset: Offset(0,
-                                -SBConstants.statsCardOverlap + (SBGap.lg * 2)),
-                            child: FadeTransition(
-                              opacity: _staggerAnimations[2],
-                              child: YourRankCard(
-                                currentUser: provider.currentUser!,
-                                isLoading: provider.isLoading,
-                              ),
+                    // Section Header
+                    SliverToBoxAdapter(
+                      child: Transform.translate(
+                        offset: Offset(
+                            0, -SBConstants.statsCardOverlap + (SBGap.lg * 3)),
+                        child: FadeTransition(
+                          opacity: _staggerAnimations[3],
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: SBInsets.h,
+                              vertical: SBGap.lg,
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 40.w,
+                                  height: 2.h,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.3),
+                                    borderRadius: BorderRadius.circular(1),
+                                  ),
+                                ),
+                                SizedBox(width: SBGap.md),
+                                Text(
+                                  'Other Ranking',
+                                  style: SBTypography.sectionHeader.copyWith(
+                                    color: Colors.white,
+                                    fontSize: 16.sp,
+                                  ),
+                                ),
+                                SizedBox(width: SBGap.md),
+                                Container(
+                                  width: 40.w,
+                                  height: 2.h,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.3),
+                                    borderRadius: BorderRadius.circular(1),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
+                      ),
+                    ),
 
-                      // Section Header
+                    // Users List
+                    Transform.translate(
+                      offset: Offset(
+                          0, -SBConstants.statsCardOverlap + (SBGap.lg * 3)),
+                      child: provider.isLoading && provider.allUsers.isEmpty
+                          ? _buildLoadingList()
+                          : _buildUsersList(provider),
+                    ),
+
+                    // Load More Button or Loading Indicator
+                    if (provider.canLoadMore)
                       SliverToBoxAdapter(
                         child: Transform.translate(
                           offset: Offset(0,
                               -SBConstants.statsCardOverlap + (SBGap.lg * 3)),
-                          child: FadeTransition(
-                            opacity: _staggerAnimations[3],
-                            child: Padding(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: SBInsets.h,
-                                vertical: SBGap.lg,
-                              ),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    width: 40.w,
-                                    height: 2.h,
-                                    decoration: BoxDecoration(
-                                      color: Colors.white.withOpacity(0.3),
-                                      borderRadius: BorderRadius.circular(1),
-                                    ),
-                                  ),
-                                  SizedBox(width: SBGap.md),
-                                  Text(
-                                    'Other Ranking',
-                                    style: SBTypography.sectionHeader.copyWith(
-                                      color: Colors.white,
-                                      fontSize: 16.sp,
-                                    ),
-                                  ),
-                                  SizedBox(width: SBGap.md),
-                                  Container(
-                                    width: 40.w,
-                                    height: 2.h,
-                                    decoration: BoxDecoration(
-                                      color: Colors.white.withOpacity(0.3),
-                                      borderRadius: BorderRadius.circular(1),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
+                          child: _buildLoadMoreIndicator(provider),
                         ),
                       ),
 
-                      // Users List
-                      Transform.translate(
-                        offset: Offset(
-                            0, -SBConstants.statsCardOverlap + (SBGap.lg * 3)),
-                        child: provider.isLoading && provider.allUsers.isEmpty
-                            ? _buildLoadingList()
-                            : _buildUsersList(provider),
-                      ),
-
-                      // Load More Button or Loading Indicator
-                      if (provider.canLoadMore)
-                        SliverToBoxAdapter(
-                          child: Transform.translate(
-                            offset: Offset(0,
-                                -SBConstants.statsCardOverlap + (SBGap.lg * 3)),
-                            child: _buildLoadMoreIndicator(provider),
-                          ),
-                        ),
-
-                      // Bottom spacing
-                      SliverToBoxAdapter(
-                        child: SizedBox(height: 100.h),
-                      ),
-                    ],
-                  ),
+                    // Bottom spacing
+                    SliverToBoxAdapter(
+                      child: SizedBox(height: 100.h),
+                    ),
+                  ],
                 ),
               ),
             ],

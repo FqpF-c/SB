@@ -138,6 +138,21 @@ class UserListItem extends StatelessWidget {
                     children: [
                       Row(
                         children: [
+                          // XP icon next to name
+                          Image.asset(
+                            'assets/icons/xp_icon.png',
+                            width: 16.w,
+                            height: 16.w,
+                            fit: BoxFit.contain,
+                            errorBuilder: (context, error, stackTrace) {
+                              return Icon(
+                                Icons.emoji_events,
+                                color: Colors.amber,
+                                size: 16.w,
+                              );
+                            },
+                          ),
+                          SizedBox(width: 6.w),
                           Flexible(
                             child: Text(
                               user.name,

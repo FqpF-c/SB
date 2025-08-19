@@ -3,9 +3,11 @@ import 'package:sms_autofill/sms_autofill.dart';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class OTPService {
   final firebase_auth.FirebaseAuth _auth = firebase_auth.FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   String? _apiKey;
 
@@ -192,7 +194,8 @@ class OTPService {
 
   Future<void> verifyOTPWithCallback({
     required String otp,
-    required Function onSuccess,
+    required String phoneNumber,
+    required Function(bool userExists, String? uid) onSuccess,
     required Function(String) onError,
   }) async {
     try {
@@ -207,24 +210,101 @@ class OTPService {
       if (isValid) {
         print('CRITICAL: OTP verification successful');
 
-        if (_auth.currentUser == null) {
-          try {
-            await _auth.signInAnonymously();
-            print('CRITICAL: Created anonymous Firebase user');
-          } catch (e) {
-            print('CRITICAL ERROR: Anonymous sign-in failed: $e');
+        try {
+          print('CRITICAL: NEW FLOW - Checking phone mapping for: $phoneNumber');
+          // Check if phone number has existing UID mapping
+          final existingUID = await _getUidByPhoneNumber(phoneNumber);
+          
+          if (existingUID != null) {
+            print('CRITICAL: NEW FLOW - Found existing UID for phone: $existingUID');
+            // Sign in with existing UID
+            await _signInWithExistingUID(existingUID, phoneNumber);
+            
+            await _clearSessionId();
+            await Future.delayed(Duration(milliseconds: 300));
+            print('CRITICAL: NEW FLOW - Calling onSuccess with existing user');
+            onSuccess(true, existingUID); // User exists
+          } else {
+            print('CRITICAL: NEW FLOW - No existing UID found, new user');
+            // Don't create any Firebase user yet - just indicate new user
+            await _clearSessionId();
+            await Future.delayed(Duration(milliseconds: 300));
+            print('CRITICAL: NEW FLOW - Calling onSuccess with new user');
+            onSuccess(false, null); // New user, go to registration
           }
+        } catch (e) {
+          print('CRITICAL ERROR: Authentication process failed: $e');
+          onError('Authentication failed. Please try again.');
+          return;
         }
-
-        await _clearSessionId();
-        await Future.delayed(Duration(milliseconds: 300));
-        onSuccess();
       } else {
         onError('The code you entered is incorrect. Please check and try again.');
       }
     } catch (e) {
       print('CRITICAL ERROR: Exception in verifyOTPWithCallback: $e');
       onError('Verification error: ${e.toString()}');
+    }
+  }
+
+  Future<String?> _getUidByPhoneNumber(String phoneNumber) async {
+    try {
+      print('CRITICAL: Looking up existing UID for phone: $phoneNumber');
+      
+      final docSnapshot = await _firestore
+          .collection('skillbench')
+          .doc('phone_to_uid')
+          .collection('mappings')
+          .doc(phoneNumber)
+          .get();
+      
+      if (docSnapshot.exists) {
+        final uid = docSnapshot.data()?['uid'];
+        print('CRITICAL: Found existing UID: $uid');
+        return uid;
+      }
+      
+      print('CRITICAL: No existing UID found for phone: $phoneNumber');
+      return null;
+    } catch (e) {
+      print('CRITICAL ERROR: Failed to lookup UID: $e');
+      return null;
+    }
+  }
+
+
+  Future<void> _signInWithExistingUID(String uid, String phoneNumber) async {
+    try {
+      print('CRITICAL: Attempting to sign in with existing UID: $uid');
+      
+      String cleanPhoneNumber = phoneNumber.replaceFirst('+91', '');
+      String email = '${cleanPhoneNumber}@skillbench.temp';
+      String password = 'temp_${cleanPhoneNumber}';
+      
+      try {
+        // Sign out any current user first
+        if (_auth.currentUser != null) {
+          await _auth.signOut();
+        }
+        
+        await _auth.signInWithEmailAndPassword(email: email, password: password);
+        print('CRITICAL: Successfully signed in with existing email account');
+        
+        // Verify the UID matches the expected one
+        if (_auth.currentUser?.uid == uid) {
+          print('CRITICAL: UID matches! Authentication successful with UID: ${_auth.currentUser?.uid}');
+          return;
+        } else {
+          print('CRITICAL ERROR: UID mismatch! Expected: $uid, Got: ${_auth.currentUser?.uid}');
+          throw Exception('UID mismatch during authentication');
+        }
+      } catch (e) {
+        print('CRITICAL ERROR: Failed to sign in with email for UID $uid: $e');
+        throw Exception('Could not authenticate with existing user credentials');
+      }
+      
+    } catch (e) {
+      print('CRITICAL ERROR: Failed to sign in with existing UID: $e');
+      throw e;
     }
   }
 

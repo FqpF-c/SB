@@ -11,6 +11,7 @@ import '../../providers/auth_provider.dart' as app_auth;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'settings_screen.dart';
+import '../../utils/dynamic_status_bar.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({Key? key}) : super(key: key);
@@ -44,7 +45,9 @@ class CirclePatternPainter extends CustomPainter {
   bool shouldRepaint(CustomPainter oldDelegate) => false;
 }
 
-class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateMixin {
+class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateMixin, DynamicStatusBarMixin {
+  @override
+  Color get primaryColor => const Color(0xFFEC407A);
   final ImagePicker _picker = ImagePicker();
 
   int selectedProfileImage = 1;
@@ -752,11 +755,11 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
       );
     }
 
-    return Scaffold(
+    return DynamicStatusBar.buildDynamicScaffold(
       backgroundColor: Colors.white,
-      // Remove any appbar to allow full scrolling
       body: CustomScrollView(
-        physics: const BouncingScrollPhysics(),
+        controller: scrollController,
+        physics: const ClampingScrollPhysics(),
         slivers: [
           // Pink header with curved bottom and profile cutout as a SliverAppBar
           SliverAppBar(

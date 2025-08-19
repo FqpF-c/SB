@@ -5,7 +5,11 @@
       "mcp__ide__getDiagnostics",
       "Bash(flutter clean:*)",
       "Bash(flutter pub:*)",
-      "Bash(flutter run:*)"
+      "Bash(flutter run:*)",
+      "Bash(flutter build:*)",
+      "Bash(sed:*)",
+      "Bash(flutter:*)",
+      "Bash(find:*)"
     ],
     "deny": []
   }

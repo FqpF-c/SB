@@ -15,6 +15,7 @@ import '../../theme/default_theme.dart';
 import '../../widgets/home/stats_row_widget.dart';
 import '../../widgets/home/technologies_widget.dart';
 import '../../widgets/home/programming_languages_widget.dart';
+import '../../utils/dynamic_status_bar.dart';
 
 class HeaderPatternPainter extends CustomPainter {
   @override
@@ -123,7 +124,7 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
+class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, DynamicStatusBarMixin {
   String _username = '';
   int _coins = 0;
   int _streaks = 0;
@@ -439,12 +440,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.light,
-    ));
-
-    return Scaffold(
+    return DynamicStatusBar.buildDynamicScaffold(
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
@@ -455,6 +451,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               color: Color(0xFF341B58),
               backgroundColor: Colors.white,
               child: CustomScrollView(
+                controller: scrollController,
                 physics: const AlwaysScrollableScrollPhysics(),
                 slivers: [
                   SliverToBoxAdapter(
@@ -519,11 +516,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               ),
             ],
           ),
-          child: SafeArea(
-            bottom: false,
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(isSmallScreen ? 20 : 40, 20, 20, 20),
-              child: Column(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              isSmallScreen ? 20 : 40, 
+              MediaQuery.of(context).padding.top + 20, 
+              20, 
+              20
+            ),
+            child: Column(
                 mainAxisSize: MainAxisSize.max,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -587,7 +587,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               ),
             ),
           ),
-        ),
         Positioned(
           top: -60,
           right: 20,

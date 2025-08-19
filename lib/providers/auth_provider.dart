@@ -16,9 +16,126 @@ class AuthProvider with ChangeNotifier {
 
   Future<String?> getCurrentUserPhone() async {
     try {
-      return await SecureStorage.read('phone_number');
+      // First try to get from secure storage
+      String? phoneFromStorage = await SecureStorage.read('phone_number');
+      if (phoneFromStorage != null) {
+        return phoneFromStorage;
+      }
+      
+      // Fallback to Firebase Auth displayName if available
+      final currentUser = _auth.currentUser;
+      if (currentUser?.displayName != null) {
+        return currentUser!.displayName;
+      }
+      
+      return null;
     } catch (e) {
       print('Error getting current user phone: $e');
+      return null;
+    }
+  }
+
+  Future<String?> getUidByPhoneNumber(String phoneNumber) async {
+    try {
+      print('DEBUG getUidByPhoneNumber: Looking up UID for phone: $phoneNumber');
+      
+      final docSnapshot = await _firestore
+          .collection('skillbench')
+          .doc('phone_to_uid')
+          .collection('mappings')
+          .doc(phoneNumber)
+          .get();
+      
+      if (docSnapshot.exists) {
+        final uid = docSnapshot.data()?['uid'];
+        print('DEBUG getUidByPhoneNumber: Found existing UID: $uid');
+        return uid;
+      }
+      
+      print('DEBUG getUidByPhoneNumber: No existing UID found for phone: $phoneNumber');
+      return null;
+    } catch (e) {
+      print('ERROR getUidByPhoneNumber: $e');
+      return null;
+    }
+  }
+
+  // For testing: Create a phone-to-UID mapping manually
+  Future<void> createTestPhoneMapping(String phoneNumber, String uid) async {
+    try {
+      print('DEBUG createTestPhoneMapping: Creating mapping for $phoneNumber -> $uid');
+      
+      await _firestore
+          .collection('skillbench')
+          .doc('phone_to_uid')
+          .collection('mappings')
+          .doc(phoneNumber)
+          .set({
+        'uid': uid,
+        'phone_number': phoneNumber,
+        'created_at': Timestamp.now(),
+        'last_updated': Timestamp.now(),
+      });
+      
+      print('DEBUG createTestPhoneMapping: Successfully created mapping');
+    } catch (e) {
+      print('ERROR createTestPhoneMapping: $e');
+      throw e;
+    }
+  }
+
+  Future<void> _signInWithExistingUID(String uid, String phoneNumber) async {
+    try {
+      print('DEBUG _signInWithExistingUID: Attempting to sign in with UID: $uid');
+      
+      // First try to find and sign in with the existing Firebase Auth account
+      String cleanPhoneNumber = phoneNumber.replaceFirst('+91', '');
+      String email = '${cleanPhoneNumber}@skillbench.temp';
+      String password = 'temp_${cleanPhoneNumber}';
+      
+      try {
+        await _auth.signInWithEmailAndPassword(email: email, password: password);
+        print('DEBUG _signInWithExistingUID: Successfully signed in with existing email account');
+        
+        // Verify the UID matches
+        if (_auth.currentUser?.uid == uid) {
+          print('DEBUG _signInWithExistingUID: UID matches! Authentication successful');
+          return;
+        } else {
+          print('WARNING _signInWithExistingUID: UID mismatch! Expected: $uid, Got: ${_auth.currentUser?.uid}');
+        }
+      } catch (e) {
+        print('DEBUG _signInWithExistingUID: Email sign-in failed, trying alternative methods: $e');
+      }
+      
+      // If email sign-in failed, sign out current user and create anonymous with specific UID reference
+      await _auth.signOut();
+      await _auth.signInAnonymously();
+      await _auth.currentUser?.updateDisplayName(phoneNumber);
+      
+      print('WARNING _signInWithExistingUID: Using anonymous auth as fallback for UID: ${_auth.currentUser?.uid}');
+      
+    } catch (e) {
+      print('ERROR _signInWithExistingUID: $e');
+      throw e;
+    }
+  }
+
+  Future<String?> getPhoneNumberByUid(String uid) async {
+    try {
+      final docSnapshot = await _firestore
+          .collection('skillbench')
+          .doc('users')
+          .collection('users')
+          .doc(uid)
+          .get();
+      
+      if (docSnapshot.exists) {
+        return docSnapshot.data()?['phone_number'];
+      }
+      return null;
+    } catch (e) {
+      print('Error getting phone number by UID: $e');
       return null;
     }
   }
@@ -61,24 +178,76 @@ class AuthProvider with ChangeNotifier {
     try {
       final isLoggedIn = await SecureStorage.read('is_logged_in') == 'true';
       final phoneNumber = await SecureStorage.read('phone_number');
-      if (isLoggedIn && phoneNumber != null) {
-        if (_auth.currentUser == null) {
-          await _auth.signInAnonymously();
+      
+      // If not marked as logged in or no phone number, user is not logged in
+      if (!isLoggedIn || phoneNumber == null) {
+        return false;
+      }
+      
+      // Ensure Firebase Auth user exists
+      if (_auth.currentUser == null) {
+        try {
+          print('DEBUG isUserLoggedIn: No current user, attempting authentication');
+          
+          // Check if this phone number has an existing UID
+          final existingUID = await getUidByPhoneNumber(phoneNumber);
+          
+          if (existingUID != null) {
+            print('DEBUG isUserLoggedIn: Found existing UID for phone: $existingUID');
+            await _signInWithExistingUID(existingUID, phoneNumber);
+          } else {
+            String cleanPhoneNumber = phoneNumber.replaceFirst('+91', '');
+            String email = '${cleanPhoneNumber}@skillbench.temp';
+            String password = 'temp_${cleanPhoneNumber}';
+            
+            try {
+              await _auth.signInWithEmailAndPassword(
+                email: email,
+                password: password,
+              );
+              print('DEBUG isUserLoggedIn: Signed in with email');
+            } catch (signInError) {
+              await _auth.signInAnonymously();
+              await _auth.currentUser?.updateDisplayName(phoneNumber);
+              print('DEBUG isUserLoggedIn: Used anonymous auth fallback');
+            }
+          }
+        } catch (e) {
+          print('Error authenticating user: $e');
+          // Don't fail login just because of auth issues
         }
+      }
+      
+      // Only check Firestore existence occasionally or if there's a specific reason
+      // For normal app launches, trust the secure storage
+      try {
+        final exists = await doesCurrentUserExistInFirestore().timeout(
+          Duration(seconds: 5), // 5 second timeout
+          onTimeout: () {
+            print('Firestore check timed out, assuming user exists');
+            return true; // Assume user exists if network is slow
+          },
+        );
         
-        final exists = await doesCurrentUserExistInFirestore();
         if (!exists) {
+          print('User does not exist in Firestore, logging out');
           await SecureStorage.delete('is_logged_in');
           await SecureStorage.delete('phone_number');
           return false;
         }
-        
-        return true;
+      } catch (e) {
+        print('Error checking user existence in Firestore: $e');
+        // Don't fail login due to network issues, trust secure storage
+        print('Assuming user is valid due to network issues');
       }
-      return false;
+      
+      return true;
     } catch (e) {
       print('Error checking login status: $e');
-      return false;
+      // If there's any error, but we have valid secure storage data, assume logged in
+      final isLoggedIn = await SecureStorage.read('is_logged_in') == 'true';
+      final phoneNumber = await SecureStorage.read('phone_number');
+      return isLoggedIn && phoneNumber != null;
     }
   }
 
@@ -109,12 +278,95 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
+  Future<void> setLoggedInWithUID(String phoneNumber, String uid) async {
+    try {
+      print('DEBUG setLoggedInWithUID: Setting login for phone: $phoneNumber with UID: $uid');
+      
+      // Verify current user matches the expected UID
+      final currentUser = _auth.currentUser;
+      if (currentUser == null || currentUser.uid != uid) {
+        throw Exception('Current Firebase user does not match expected UID: $uid');
+      }
+      
+      await SecureStorage.write('is_logged_in', 'true');
+      await SecureStorage.write('phone_number', phoneNumber);
+
+      // Update last login in Firestore
+      final exists = await doesCurrentUserExistInFirestore();
+      if (exists) {
+        await _firestore
+            .collection('skillbench')
+            .doc('users')
+            .collection('users')
+            .doc(uid)
+            .update({
+          'last_login': Timestamp.now(),
+        });
+        
+        print('DEBUG setLoggedInWithUID: Updated last login for UID: $uid');
+      }
+
+      notifyListeners();
+      print('DEBUG setLoggedInWithUID: Successfully set logged in for UID: $uid');
+    } catch (e) {
+      print('ERROR setLoggedInWithUID: $e');
+      throw e;
+    }
+  }
+
   Future<void> setLoggedIn(String phoneNumber) async {
     try {
-      User? user = _auth.currentUser;
-      if (user == null) {
-        final userCredential = await _auth.signInAnonymously();
-        user = userCredential.user;
+      print('DEBUG setLoggedIn: Starting login for phone: $phoneNumber');
+      
+      // First, check if this phone number already has an associated UID
+      final existingUID = await getUidByPhoneNumber(phoneNumber);
+      
+      if (existingUID != null) {
+        print('DEBUG setLoggedIn: Found existing UID for phone: $existingUID');
+        await _signInWithExistingUID(existingUID, phoneNumber);
+      } else {
+        print('DEBUG setLoggedIn: No existing UID found, creating new user');
+        
+        User? user = _auth.currentUser;
+        print('DEBUG setLoggedIn: Current user before auth: ${user?.uid}');
+        
+        if (user == null) {
+          String cleanPhoneNumber = phoneNumber.replaceFirst('+91', '');
+          String email = '${cleanPhoneNumber}@skillbench.temp';
+          String password = 'temp_${cleanPhoneNumber}';
+          
+          print('DEBUG setLoggedIn: Attempting sign in with email: $email');
+          
+          try {
+            await _auth.signInWithEmailAndPassword(
+              email: email,
+              password: password,
+            );
+            user = _auth.currentUser;
+            print('DEBUG setLoggedIn: Successfully signed in existing user: ${user?.uid}');
+          } catch (signInError) {
+            print('DEBUG setLoggedIn: Sign in failed: $signInError');
+            print('DEBUG setLoggedIn: Attempting to create new user');
+            
+            try {
+              await _auth.createUserWithEmailAndPassword(
+                email: email,
+                password: password,
+              );
+              await _auth.currentUser?.updateDisplayName(phoneNumber);
+              user = _auth.currentUser;
+              print('DEBUG setLoggedIn: Successfully created new user: ${user?.uid}');
+            } catch (createError) {
+              print('DEBUG setLoggedIn: Create user failed: $createError');
+              print('DEBUG setLoggedIn: Falling back to anonymous auth');
+              
+              final userCredential = await _auth.signInAnonymously();
+              await userCredential.user?.updateDisplayName(phoneNumber);
+              user = userCredential.user;
+              print('DEBUG setLoggedIn: Anonymous user created: ${user?.uid}');
+            }
+          }
+        }
       }
 
       await SecureStorage.write('is_logged_in', 'true');
@@ -122,14 +374,32 @@ class AuthProvider with ChangeNotifier {
 
       final exists = await doesCurrentUserExistInFirestore();
       if (exists) {
-        await _firestore
-            .collection('skillbench')
-            .doc('users')
-            .collection('users')
-            .doc(user!.uid)
-            .update({
-          'last_login': Timestamp.now(),
-        });
+        final currentUser = _auth.currentUser;
+        if (currentUser != null) {
+          await _firestore.runTransaction((transaction) async {
+            final userRef = _firestore
+                .collection('skillbench')
+                .doc('users')
+                .collection('users')
+                .doc(currentUser.uid);
+
+            transaction.update(userRef, {
+              'last_login': Timestamp.now(),
+            });
+
+            final phoneToUidRef = _firestore
+                .collection('skillbench')
+                .doc('phone_to_uid')
+                .collection('mappings')
+                .doc(phoneNumber);
+
+            transaction.set(phoneToUidRef, {
+              'uid': currentUser.uid,
+              'phone_number': phoneNumber,
+              'last_updated': Timestamp.now(),
+            }, SetOptions(merge: true));
+          });
+        }
       }
 
       notifyListeners();
@@ -143,8 +413,31 @@ class AuthProvider with ChangeNotifier {
     try {
       User? user = _auth.currentUser;
       if (user == null) {
-        final userCredential = await _auth.signInAnonymously();
-        user = userCredential.user;
+        final phoneNumber = userData['phone_number'];
+        String cleanPhoneNumber = phoneNumber.replaceFirst('+91', '');
+        String email = '${cleanPhoneNumber}@skillbench.temp';
+        String password = 'temp_${cleanPhoneNumber}';
+        
+        try {
+          await _auth.signInWithEmailAndPassword(
+            email: email,
+            password: password,
+          );
+          user = _auth.currentUser;
+        } catch (signInError) {
+          try {
+            await _auth.createUserWithEmailAndPassword(
+              email: email,
+              password: password,
+            );
+            await _auth.currentUser?.updateDisplayName(phoneNumber);
+            user = _auth.currentUser;
+          } catch (createError) {
+            final userCredential = await _auth.signInAnonymously();
+            await userCredential.user?.updateDisplayName(phoneNumber);
+            user = userCredential.user;
+          }
+        }
       }
 
       final phoneNumber = userData['phone_number'];
@@ -153,6 +446,8 @@ class AuthProvider with ChangeNotifier {
       final batch = userData['batch'];
       final firebaseUID = user!.uid;
 
+      print('DEBUG registerUser: Starting Firestore transaction for UID: $firebaseUID');
+      
       await _firestore.runTransaction((transaction) async {
         final mainUserRef = _firestore
             .collection('skillbench')
@@ -160,8 +455,13 @@ class AuthProvider with ChangeNotifier {
             .collection('users')
             .doc(firebaseUID);
 
+        print('DEBUG registerUser: Main user ref path: skillbench/users/users/$firebaseUID');
+
         final userSnapshot = await transaction.get(mainUserRef);
         final existingData = userSnapshot.exists ? userSnapshot.data() : null;
+        
+        print('DEBUG registerUser: User document exists: ${userSnapshot.exists}');
+        print('DEBUG registerUser: Existing data: $existingData');
 
         final completeUserData = {
           'phone_number': phoneNumber,
@@ -189,7 +489,22 @@ class AuthProvider with ChangeNotifier {
                   }),
         };
 
+        print('DEBUG registerUser: Complete user data to save: $completeUserData');
+
         transaction.set(mainUserRef, completeUserData, SetOptions(merge: true));
+
+        final phoneToUidRef = _firestore
+            .collection('skillbench')
+            .doc('phone_to_uid')
+            .collection('mappings')
+            .doc(phoneNumber);
+
+        transaction.set(phoneToUidRef, {
+          'uid': firebaseUID,
+          'phone_number': phoneNumber,
+          'created_at': Timestamp.now(),
+          'last_updated': Timestamp.now(),
+        }, SetOptions(merge: true));
 
         final collegeUserRef = _firestore
             .collection('skillbench')
@@ -221,6 +536,8 @@ class AuthProvider with ChangeNotifier {
   Future<void> _initializeRealtimeUserData(
       String firebaseUID, Map<String, dynamic> userData) async {
     try {
+      print('DEBUG _initializeRealtimeUserData: Starting for UID: $firebaseUID');
+      
       final realtimeUserData = {
         'phone_number': userData['phone_number'],
         'streaks': 0,
@@ -234,11 +551,17 @@ class AuthProvider with ChangeNotifier {
         'last_updated': ServerValue.timestamp,
       };
 
+      print('DEBUG _initializeRealtimeUserData: Data to save: $realtimeUserData');
+      print('DEBUG _initializeRealtimeUserData: Path: skillbench/users/$firebaseUID');
+
       await _database
           .ref('skillbench/users/$firebaseUID')
           .set(realtimeUserData);
+          
+      print('DEBUG _initializeRealtimeUserData: Successfully saved realtime data');
     } catch (e) {
-      print('Error initializing realtime user data: $e');
+      print('ERROR _initializeRealtimeUserData: $e');
+      print('ERROR _initializeRealtimeUserData: Stack trace: ${StackTrace.current}');
       throw e;
     }
   }
@@ -258,7 +581,17 @@ class AuthProvider with ChangeNotifier {
   Future<Map<String, dynamic>?> getCurrentUserData() async {
     try {
       final currentUser = _auth.currentUser;
-      if (currentUser == null) return null;
+      print('DEBUG getCurrentUserData: currentUser = ${currentUser?.uid}');
+      print('DEBUG getCurrentUserData: currentUser email = ${currentUser?.email}');
+      print('DEBUG getCurrentUserData: currentUser displayName = ${currentUser?.displayName}');
+      
+      if (currentUser == null) {
+        print('DEBUG getCurrentUserData: No current user found');
+        return null;
+      }
+
+      final path = 'skillbench/users/users/${currentUser.uid}';
+      print('DEBUG getCurrentUserData: Fetching from path: $path');
 
       final docSnapshot = await _firestore
           .collection('skillbench')
@@ -267,13 +600,20 @@ class AuthProvider with ChangeNotifier {
           .doc(currentUser.uid)
           .get();
 
+      print('DEBUG getCurrentUserData: Document exists = ${docSnapshot.exists}');
+      
       if (docSnapshot.exists) {
-        return docSnapshot.data();
+        final data = docSnapshot.data();
+        print('DEBUG getCurrentUserData: Data = $data');
+        return data;
+      } else {
+        print('DEBUG getCurrentUserData: Document does not exist at path: $path');
       }
 
       return null;
     } catch (e) {
-      print('Error getting user data: $e');
+      print('ERROR getCurrentUserData: $e');
+      print('ERROR getCurrentUserData: Stack trace: ${StackTrace.current}');
       return null;
     }
   }
@@ -281,19 +621,32 @@ class AuthProvider with ChangeNotifier {
   Future<Map<String, dynamic>?> getUserStatsFromRealtimeDB() async {
     try {
       final currentUser = _auth.currentUser;
-      if (currentUser == null) return null;
+      print('DEBUG getUserStatsFromRealtimeDB: currentUser = ${currentUser?.uid}');
+      
+      if (currentUser == null) {
+        print('DEBUG getUserStatsFromRealtimeDB: No current user found');
+        return null;
+      }
 
-      final dataSnapshot =
-          await _database.ref('skillbench/users/${currentUser.uid}').get();
+      final path = 'skillbench/users/${currentUser.uid}';
+      print('DEBUG getUserStatsFromRealtimeDB: Fetching from path: $path');
 
+      final dataSnapshot = await _database.ref(path).get();
+
+      print('DEBUG getUserStatsFromRealtimeDB: Data exists = ${dataSnapshot.exists}');
+      
       if (dataSnapshot.exists) {
         final data = dataSnapshot.value as Map<dynamic, dynamic>;
+        print('DEBUG getUserStatsFromRealtimeDB: Data = $data');
         return Map<String, dynamic>.from(data);
+      } else {
+        print('DEBUG getUserStatsFromRealtimeDB: No data found at path: $path');
       }
 
       return null;
     } catch (e) {
-      print('Error getting user stats from realtime database: $e');
+      print('ERROR getUserStatsFromRealtimeDB: $e');
+      print('ERROR getUserStatsFromRealtimeDB: Stack trace: ${StackTrace.current}');
       return null;
     }
   }

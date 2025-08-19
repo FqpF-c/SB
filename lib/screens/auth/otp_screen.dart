@@ -103,27 +103,6 @@ class _OTPScreenState extends State<OTPScreen> {
     super.dispose();
   }
 
-  void _handleNavigation() {
-    if (!mounted) return;
-      
-    if (widget.userExists) {
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (context) => const NavBar()),
-        (route) => false,
-      );
-    } else {
-      Navigator.pushAndRemoveUntil(
-        context,
-        PageRouteBuilder(
-          pageBuilder: (context, animation1, animation2) => 
-            SignupScreen(phoneNumber: widget.phoneNumber),
-          transitionDuration: Duration.zero,
-        ),
-        (route) => false,
-      );
-    }
-  }
 
   Future<void> _verifyOTP() async {
     final otp = _otpController.text.trim();
@@ -152,22 +131,53 @@ class _OTPScreenState extends State<OTPScreen> {
     try {
       await OTPService().verifyOTPWithCallback(
         otp: otp,
-        onSuccess: () async {
+        phoneNumber: widget.phoneNumber,
+        onSuccess: (bool userExists, String? uid) async {
           if (!mounted) return;
           
           try {
-            await authProvider.setLoggedIn(widget.phoneNumber);
-            
-            if (!mounted) return;
-            
-            setState(() {
-              _isLoading = false;
-            });
-            
-            WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (userExists && uid != null) {
+              print('DEBUG OTP: User exists with UID: $uid');
+              // User exists, set logged in and navigate to main app
+              await authProvider.setLoggedInWithUID(widget.phoneNumber, uid);
+              
               if (!mounted) return;
-              _handleNavigation();
-            });
+              
+              setState(() {
+                _isLoading = false;
+              });
+              
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!mounted) return;
+                // Navigate to main app (NavBar)
+                Navigator.pushAndRemoveUntil(
+                  context,
+                  MaterialPageRoute(builder: (context) => const NavBar()),
+                  (route) => false,
+                );
+              });
+            } else {
+              print('DEBUG OTP: New user, navigating to registration');
+              // New user, navigate to registration
+              if (!mounted) return;
+              
+              setState(() {
+                _isLoading = false;
+              });
+              
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!mounted) return;
+                Navigator.pushAndRemoveUntil(
+                  context,
+                  PageRouteBuilder(
+                    pageBuilder: (context, animation1, animation2) => 
+                      SignupScreen(phoneNumber: widget.phoneNumber),
+                    transitionDuration: Duration.zero,
+                  ),
+                  (route) => false,
+                );
+              });
+            }
           } catch (e) {
             if (!mounted) return;
             
@@ -175,11 +185,11 @@ class _OTPScreenState extends State<OTPScreen> {
               _isLoading = false;
               _isAuthenticating = false;
               _hasError = true;
-              _errorMessage = 'Error updating login status. Please try again.';
+              _errorMessage = 'Error during authentication. Please try again.';
             });
             
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Error updating login status. Please try again.')),
+              SnackBar(content: Text('Error during authentication: $e')),
             );
           }
         },

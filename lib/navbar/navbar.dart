@@ -43,15 +43,14 @@ class _NavBarState extends State<NavBar> {
     return Scaffold(
       body: _screens[_currentIndex],
       extendBody: true,
-      bottomNavigationBar: Padding(
-        padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
-        child: Container(
-          padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 10.h),
-          decoration: BoxDecoration(
-            color: const Color(0xFF3D1560),
-            borderRadius: BorderRadius.circular(20.r),
-          ),
-          child: Row(
+      bottomNavigationBar: Container(
+        margin: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
+        padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 10.h),
+        decoration: BoxDecoration(
+          color: const Color(0xFF3D1560),
+          borderRadius: BorderRadius.circular(20.r),
+        ),
+        child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: List.generate(_icons.length, (index) {
               final bool isSelected = _currentIndex == index;
@@ -96,7 +95,6 @@ class _NavBarState extends State<NavBar> {
                 ),
               );
             }),
-          ),
         ),
       ),
     );

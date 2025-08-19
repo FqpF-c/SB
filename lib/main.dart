@@ -108,7 +108,22 @@ class _AuthCheckScreenState extends State<AuthCheckScreen> {
       final isFirstTime = prefs.getBool('first_time') ?? true;
 
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      final userLoggedIn = await authProvider.isUserLoggedIn();
+
+      // Add timeout and better error handling for login check
+      bool userLoggedIn = false;
+      try {
+        userLoggedIn = await authProvider.isUserLoggedIn().timeout(
+          Duration(seconds: 10), // 10 second timeout
+          onTimeout: () {
+            print('Login check timed out, checking secure storage directly');
+            // If network is slow, check secure storage directly
+            return _checkSecureStorageDirectly();
+          },
+        );
+      } catch (e) {
+        print('Error checking login status: $e');
+        userLoggedIn = await _checkSecureStorageDirectly();
+      }
 
       if (mounted) {
         setState(() {
@@ -130,9 +145,15 @@ class _AuthCheckScreenState extends State<AuthCheckScreen> {
         });
       } else {
         if (userLoggedIn) {
-          await authProvider.checkStreakStatusAndNotify();
-          Provider.of<ProgressProvider>(context, listen: false)
-              .loadAllProgress();
+          // Try to load additional data, but don't fail if it doesn't work
+          try {
+            await authProvider.checkStreakStatusAndNotify();
+            Provider.of<ProgressProvider>(context, listen: false)
+                .loadAllProgress();
+          } catch (e) {
+            print('Error loading additional data: $e');
+            // Continue anyway
+          }
 
           if (mounted) {
             Navigator.pushReplacement(
@@ -150,7 +171,7 @@ class _AuthCheckScreenState extends State<AuthCheckScreen> {
         }
       }
     } catch (e) {
-      print('ERROR: $e');
+      print('ERROR in _checkFirstTime: $e');
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -161,6 +182,17 @@ class _AuthCheckScreenState extends State<AuthCheckScreen> {
           MaterialPageRoute(builder: (_) => const LoginScreen()),
         );
       }
+    }
+  }
+
+  Future<bool> _checkSecureStorageDirectly() async {
+    try {
+      final isLoggedIn = await SecureStorage.read('is_logged_in') == 'true';
+      final phoneNumber = await SecureStorage.read('phone_number');
+      return isLoggedIn && phoneNumber != null;
+    } catch (e) {
+      print('Error checking secure storage directly: $e');
+      return false;
     }
   }
 

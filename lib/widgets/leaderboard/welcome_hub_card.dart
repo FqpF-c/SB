@@ -73,40 +73,75 @@ class WelcomeHubCard extends StatelessWidget {
   }
 
   Widget _buildStatChip(String label, String value, IconData icon) {
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: SBGap.md,
-        vertical: SBGap.xs,
-      ),
-      decoration: BoxDecoration(
-        color: SBColors.pillPurple,
-        borderRadius: BorderRadius.circular(SBRadii.sm),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Icon box
+        Container(
+          padding: EdgeInsets.all(SBGap.xs),
+          decoration: BoxDecoration(
+            color: SBColors.pillPurple,
+            borderRadius: BorderRadius.circular(SBRadii.xs),
+            border: Border.all(
+              color: Colors.white.withOpacity(0.1),
+              width: 1,
+            ),
+          ),
+          child: Icon(
             icon,
             color: Colors.white.withOpacity(0.8),
             size: 14.sp,
           ),
-          SizedBox(width: SBGap.xs),
-          Text(
-            value,
-            style: SBTypography.chip.copyWith(
-              fontWeight: FontWeight.w600,
+        ),
+        SizedBox(width: SBGap.xs),
+        
+        // Text box
+        Container(
+          padding: EdgeInsets.symmetric(
+            horizontal: SBGap.xs,
+            vertical: SBGap.xs,
+          ),
+          decoration: BoxDecoration(
+            color: SBColors.pillPurple,
+            borderRadius: BorderRadius.circular(SBRadii.xs),
+            border: Border.all(
+              color: Colors.white.withOpacity(0.1),
+              width: 1,
             ),
           ),
-          SizedBox(width: 4.w),
-          Text(
+          child: Text(
             label,
             style: SBTypography.chip.copyWith(
-              color: Colors.white.withOpacity(0.8),
+              color: Colors.white.withOpacity(0.7),
               fontSize: 10.sp,
             ),
           ),
-        ],
-      ),
+        ),
+        SizedBox(width: SBGap.xs),
+        
+        // Number box (on the right)
+        Container(
+          padding: EdgeInsets.symmetric(
+            horizontal: SBGap.xs,
+            vertical: SBGap.xs,
+          ),
+          decoration: BoxDecoration(
+            color: SBColors.pillPurple,
+            borderRadius: BorderRadius.circular(SBRadii.xs),
+            border: Border.all(
+              color: Colors.white.withOpacity(0.1),
+              width: 1,
+            ),
+          ),
+          child: Text(
+            value,
+            style: SBTypography.chip.copyWith(
+              fontWeight: FontWeight.w600,
+              color: Colors.white,
+            ),
+          ),
+        ),
+      ],
     );
   }
 

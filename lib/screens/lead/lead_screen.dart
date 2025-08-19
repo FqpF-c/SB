@@ -6,6 +6,7 @@ import 'dart:ui' show ImageFilter;
 import 'dart:math';
 import '../../providers/lead_provider.dart';
 import '../../theme/default_theme.dart';
+import '../../utils/dynamic_status_bar.dart';
 
 class LeadScreen extends StatefulWidget {
   const LeadScreen({Key? key}) : super(key: key);
@@ -14,7 +15,7 @@ class LeadScreen extends StatefulWidget {
   State<LeadScreen> createState() => _LeadScreenState();
 }
 
-class _LeadScreenState extends State<LeadScreen> with TickerProviderStateMixin {
+class _LeadScreenState extends State<LeadScreen> with TickerProviderStateMixin, DynamicStatusBarMixin {
   late AnimationController _animationController;
   late AnimationController _podiumController;
   late Animation<double> _fadeAnimation;
@@ -117,8 +118,10 @@ class _LeadScreenState extends State<LeadScreen> with TickerProviderStateMixin {
                 onRefresh: () => leaderboardProvider.refreshData(),
                 color: AppTheme.secondaryColor,
                 backgroundColor: Colors.white,
+                displacement: 0.0, // Prevent visual pulling
+                strokeWidth: 3.0,
                 child: CustomScrollView(
-                  physics: const BouncingScrollPhysics(),
+                  physics: const ClampingScrollPhysics(),
                   slivers: [
                     _buildEnhancedAppBar(),
                     _buildStatsCard(leaderboardProvider),
